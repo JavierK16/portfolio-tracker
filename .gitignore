@@ -1,0 +1,20 @@
+# Runtime data — never commit these
+portfolio_tracker/data/
+portfolio_tracker/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+
+# IDE / OS
+.claude/
+.vscode/
+*.DS_Store
+Thumbs.db

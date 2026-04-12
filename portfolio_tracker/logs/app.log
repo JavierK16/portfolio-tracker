@@ -89,3 +89,49 @@
 2026-04-12 19:36:35,295 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
 2026-04-12 19:36:35,297 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
 2026-04-12 19:36:35,297 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:43:00,572 [INFO] src.database — Database initialised at data/portfolio.db
+2026-04-12 19:43:00,572 [INFO] src.database — Database ready
+2026-04-12 19:43:01,566 [INFO] src.fx_engine — ECB FX rates updated: {'EUR': 1.0, 'USD': 1.1711, 'JPY': 186.43, 'CZK': 24.365, 'DKK': 7.4727, 'GBP': 0.87105, 'HUF': 377.2, 'PLN': 4.2435, 'RON': 5.0915, 'SEK': 10.836, 'CHF': 0.9241, 'ISK': 143.29, 'NOK': 11.1165, 'TRY': 52.3147, 'AUD': 1.6561, 'BRL': 5.9191, 'CAD': 1.6187, 'CNY': 7.9967, 'HKD': 9.1729, 'IDR': 20020.25, 'ILS': 3.5709, 'INR': 108.7795, 'KRW': 1737.06, 'MXN': 20.3184, 'MYR': 4.6434, 'NZD': 2.0034, 'PHP': 70.088, 'SGD': 1.4919, 'THB': 37.592, 'ZAR': 19.2389}
+2026-04-12 19:43:01,569 [INFO] src.fx_engine — FX background refresh started (interval=14400s)
+2026-04-12 19:43:02,827 [INFO] src.price_engine — PriceEngine: starting refresh
+2026-04-12 19:43:04,081 [INFO] src.price_engine — PriceEngine refresh complete — portfolio value: €100000.00
+2026-04-12 19:43:04,082 [INFO] src.price_engine — PriceEngine background refresh started
+2026-04-12 19:43:04,082 [INFO] src.geo_scorer — GeoScorer: starting refresh
+2026-04-12 19:43:08,730 [INFO] src.geo_scorer — GeoScorer refresh complete — 0 new articles processed
+2026-04-12 19:43:08,731 [INFO] src.geo_scorer — GeoScorer background refresh started
+2026-04-12 19:43:08,732 [INFO] src.signal_engine — SignalEngine: computing signals
+2026-04-12 19:43:08,754 [INFO] src.signal_engine — SignalEngine background refresh started
+2026-04-12 19:43:08,755 [INFO] src.alert_manager — AlertManager background checks started
+2026-04-12 19:43:38,759 [INFO] alerts — [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:43:38,760 [INFO] src.alert_manager — Alert emitted: [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:43:38,762 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:43:38,763 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:43:38,765 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:43:38,766 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:48:04,083 [INFO] src.price_engine — PriceEngine: starting refresh
+2026-04-12 19:48:05,007 [INFO] src.price_engine — PriceEngine refresh complete — portfolio value: €100000.00
+2026-04-12 19:48:38,771 [INFO] alerts — [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:48:38,771 [INFO] src.alert_manager — Alert emitted: [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:48:38,773 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:48:38,773 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:48:38,775 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:48:38,775 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:53:05,009 [INFO] src.price_engine — PriceEngine: starting refresh
+2026-04-12 19:53:05,935 [INFO] src.price_engine — PriceEngine refresh complete — portfolio value: €100000.00
+2026-04-12 19:53:38,782 [INFO] alerts — [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:53:38,782 [INFO] src.alert_manager — Alert emitted: [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:53:38,785 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:53:38,785 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:53:38,787 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:53:38,787 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:58:05,936 [INFO] src.price_engine — PriceEngine: starting refresh
+2026-04-12 19:58:06,806 [INFO] src.price_engine — PriceEngine refresh complete — portfolio value: €100000.00
+2026-04-12 19:58:08,732 [INFO] src.geo_scorer — GeoScorer: starting refresh
+2026-04-12 19:58:08,762 [INFO] src.signal_engine — SignalEngine: computing signals
+2026-04-12 19:58:13,321 [INFO] src.geo_scorer — GeoScorer refresh complete — 0 new articles processed
+2026-04-12 19:58:38,795 [INFO] alerts — [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:58:38,796 [INFO] src.alert_manager — Alert emitted: [MEDIUM] PRICE_MOVE | RHM.DE | RHM.DE moved -5.57% today
+2026-04-12 19:58:38,799 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:58:38,799 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, METALS | Oil Price Shock Drives 140% Surge in China's EV Exports to Record High
+2026-04-12 19:58:38,802 [INFO] alerts — [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
+2026-04-12 19:58:38,803 [INFO] src.alert_manager — Alert emitted: [MEDIUM] MULTI_SECTOR_NEWS |  | Article matches 3 sectors: ENERGY, DEFENSE, GOLD | IMF Warns Iran War Will Leave Lasting Scars on Global Economy
