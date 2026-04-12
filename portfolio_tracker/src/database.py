@@ -231,6 +231,34 @@ def save_price_snapshot(ticker: str, price_local: float, price_eur: float,
         s.commit()
 
 
+def bulk_save_price_history(records: list) -> int:
+    """Insert many PriceHistory rows efficiently. Each record is a dict with
+    keys: ticker, timestamp, price_local, price_eur, volume.
+    Returns count of inserted rows."""
+    with get_session() as s:
+        objs = [PriceHistory(**r) for r in records]
+        s.add_all(objs)
+        s.commit()
+        return len(objs)
+
+
+def get_oldest_price_date(ticker: str) -> Optional[datetime]:
+    """Return the earliest timestamp in price_history for a ticker."""
+    with get_session() as s:
+        row = (
+            s.query(PriceHistory.timestamp)
+            .filter(PriceHistory.ticker == ticker)
+            .order_by(PriceHistory.timestamp.asc())
+            .first()
+        )
+        return row[0] if row else None
+
+
+def get_price_history_count(ticker: str) -> int:
+    with get_session() as s:
+        return s.query(PriceHistory).filter(PriceHistory.ticker == ticker).count()
+
+
 def get_price_history(ticker: str, days: int = 30):
     """Return price_eur history for the last N days."""
     from datetime import timedelta

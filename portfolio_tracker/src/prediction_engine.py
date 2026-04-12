@@ -458,8 +458,8 @@ def run_ensemble_for_position(ticker: str, sector: str, current_price_eur: float
     if current_price_eur is None or current_price_eur <= 0:
         return None
 
-    # Get price history
-    hist = get_price_history(ticker, days=90)
+    # Get price history — use full backfilled data (up to 730 days)
+    hist = get_price_history(ticker, days=730)
     if hist:
         prices = pd.Series(
             [h.price_eur for h in hist if h.price_eur],

@@ -96,6 +96,7 @@ def _init_system():
     fx.start_background_refresh()
 
     pe = get_price_engine()
+    pe.backfill_history(years=2)  # One-time 2-year history download
     pe.start_background_refresh()
 
     gs = get_geo_scorer()

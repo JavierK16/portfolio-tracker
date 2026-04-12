@@ -17,6 +17,7 @@ import numpy as np
 from src.database import (
     get_entry_price, save_entry_price, save_price_snapshot,
     get_price_history, get_config_value, set_config_value,
+    bulk_save_price_history, get_oldest_price_date, get_price_history_count,
 )
 from src.fx_engine import get_fx_engine
 
@@ -475,6 +476,112 @@ class PriceEngine:
 
         result = pd.DataFrame({"timestamp": total.index, "total_value_eur": total.values})
         return result.sort_values("timestamp").reset_index(drop=True)
+
+
+    # ─────────────────────────────────────────────────────────
+    # HISTORICAL BACKFILL
+    # ─────────────────────────────────────────────────────────
+
+    def backfill_history(self, years: int = 2) -> None:
+        """
+        Download up to `years` of daily history from yfinance for every
+        portfolio ticker and store in price_history. Only fetches data older
+        than what we already have. Runs once on first startup (flag in DB).
+        """
+        from config import (
+            PORTFOLIO, YF_TICKER_MAP, YF_CURRENCY_OVERRIDE, YF_PENCE_TICKERS,
+        )
+
+        flag = get_config_value("history_backfill_done")
+        if flag == "true":
+            logger.info("History backfill already completed — skipping")
+            return
+
+        logger.info("Starting %d-year price history backfill...", years)
+
+        if self._fx.is_stale():
+            self._fx.refresh()
+
+        for pos_cfg in PORTFOLIO:
+            ticker = pos_cfg["ticker"]
+            yf_sym = YF_TICKER_MAP.get(ticker, ticker)
+
+            # Check how much history we already have
+            existing_count = get_price_history_count(ticker)
+            oldest = get_oldest_price_date(ticker)
+
+            # If we already have 400+ daily rows, skip (enough for 2 years of trading days)
+            if existing_count >= 400:
+                logger.debug("Backfill skip %s — already has %d rows", ticker, existing_count)
+                continue
+
+            try:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    hist = yf.Ticker(yf_sym).history(
+                        period=f"{years}y", interval="1d", auto_adjust=True,
+                    )
+
+                if hist is None or hist.empty:
+                    logger.warning("Backfill: no history for %s (%s)", ticker, yf_sym)
+                    continue
+
+                # Normalise columns
+                col_map = {}
+                for c in hist.columns:
+                    cl = c.lower()
+                    if "close" in cl:
+                        col_map[c] = "Close"
+                    elif "volume" in cl:
+                        col_map[c] = "Volume"
+                hist = hist.rename(columns=col_map)
+                if "Close" not in hist.columns:
+                    continue
+                if "Volume" not in hist.columns:
+                    hist["Volume"] = 0.0
+
+                hist = hist[["Close", "Volume"]].dropna(subset=["Close"])
+
+                # Pence conversion
+                if yf_sym in YF_PENCE_TICKERS or ticker in YF_PENCE_TICKERS:
+                    hist["Close"] = hist["Close"] / 100.0
+
+                # Convert to EUR
+                effective_ccy = YF_CURRENCY_OVERRIDE.get(ticker, pos_cfg["currency"])
+
+                # Only keep rows older than our oldest existing record
+                if oldest is not None:
+                    hist = hist[hist.index < pd.Timestamp(oldest, tz="UTC")]
+                    if hist.empty:
+                        logger.debug("Backfill skip %s — no older data to add", ticker)
+                        continue
+
+                records = []
+                for ts, row in hist.iterrows():
+                    price_local = float(row["Close"])
+                    price_eur = self._fx.to_eur(price_local, effective_ccy)
+                    vol = float(row["Volume"]) if pd.notna(row["Volume"]) else None
+                    # Ensure timezone-aware timestamp
+                    if ts.tzinfo is None:
+                        ts = ts.tz_localize("UTC")
+                    records.append({
+                        "ticker": ticker,
+                        "timestamp": ts.to_pydatetime(),
+                        "price_local": price_local,
+                        "price_eur": price_eur,
+                        "volume": vol,
+                    })
+
+                if records:
+                    count = bulk_save_price_history(records)
+                    logger.info("Backfilled %d daily records for %s (%s)", count, ticker, yf_sym)
+
+            except Exception as e:
+                logger.error("Backfill failed for %s: %s", ticker, e)
+
+        set_config_value("history_backfill_done", "true")
+        logger.info("History backfill complete for all tickers")
 
 
 # Module-level singleton
