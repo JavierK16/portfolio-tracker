@@ -858,6 +858,61 @@ def render_predictions(geo_context: GeoContext) -> None:
         "Always consult a licensed financial advisor before making investment decisions."
     )
 
+    # ── Market Regime Indicator ───────────────────────────────
+    regime = prediction_engine.get_current_regime()
+    if regime:
+        regime_colours = {
+            "CALM": "#00ff88", "ELEVATED": "#ffaa00",
+            "STRESSED": "#ff6644", "CRISIS": "#ff0000",
+        }
+        rc = regime_colours.get(regime.regime_name, "#888")
+        pattern_str = ", ".join(
+            f"{p[0]} ({p[1]:.0%})" for p in regime.active_patterns
+        ) if regime.active_patterns else "None"
+
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        with rc1:
+            st.markdown(
+                f'**Market Regime:** <span style="color:{rc};font-size:1.1rem">'
+                f'{regime.regime_name}</span> ({regime.regime_score:.0f}/100)',
+                unsafe_allow_html=True,
+            )
+        with rc2:
+            st.markdown(
+                f"**Cross-Sector Correlation:** {regime.cross_sector_correlation:.2f}<br>"
+                f"<small>VIX: {regime.vix_level:.0f} | Vol z-score: {regime.vol_regime_z:.1f}</small>",
+                unsafe_allow_html=True,
+            )
+        with rc3:
+            contagion_col = "#ff4444" if regime.contagion_risk > 0.5 else (
+                "#ffaa00" if regime.contagion_risk > 0.25 else "#00ff88"
+            )
+            st.markdown(
+                f'**Contagion Risk:** <span style="color:{contagion_col}">'
+                f'{regime.contagion_risk:.0%}</span>',
+                unsafe_allow_html=True,
+            )
+        with rc4:
+            st.markdown(f"**Active Patterns:** {pattern_str}")
+
+        # Show regime factors
+        if regime.factors:
+            with st.expander("Regime Analysis Detail", expanded=False):
+                for f in regime.factors:
+                    st.text(f"  {f}")
+                if regime.sector_adjustments:
+                    st.markdown("**Crisis-adjusted sector biases (weekly %):**")
+                    adj_parts = []
+                    for sec, adj in sorted(regime.sector_adjustments.items(),
+                                           key=lambda x: x[1], reverse=True):
+                        col = "#00ff88" if adj > 0 else "#ff4444" if adj < 0 else "#888"
+                        adj_parts.append(
+                            f'<span style="color:{col}">{sec}: {adj:+.1f}%</span>'
+                        )
+                    st.markdown(" | ".join(adj_parts), unsafe_allow_html=True)
+
+        st.markdown("---")
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Forecast Overview", "Position Forecasts",
         "Confidence Intervals", "Prediction Accuracy",

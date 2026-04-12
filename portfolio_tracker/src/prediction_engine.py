@@ -1,6 +1,7 @@
 """
-prediction_engine.py — 4-model ensemble prediction engine.
-Models: EMA momentum, Ridge regression, Bollinger mean-reversion, geopolitical overlay.
+prediction_engine.py — 5-model ensemble prediction engine.
+Models: EMA momentum, Ridge regression, Bollinger mean-reversion,
+        geopolitical overlay, crisis pattern & cross-sector regime.
 Produces position-, sector-, and portfolio-level forecasts at 3 horizons (24h, 1w, 1m).
 """
 
@@ -24,6 +25,9 @@ from config import (
 from src.database import (
     get_price_history, save_prediction, get_geo_states,
     get_sector_score_history, get_recent_news,
+)
+from src.crisis_patterns import (
+    detect_market_regime, model_crisis_regime, MarketRegime,
 )
 
 logger = logging.getLogger(__name__)
@@ -453,8 +457,9 @@ def _determine_confidence(model_results: Dict[str, dict], final_pct: float) -> s
 
 def run_ensemble_for_position(ticker: str, sector: str, current_price_eur: float,
                               horizon_name: str, horizon_days: int,
-                              geo_states_override: Optional[Dict] = None) -> Optional[PricePrediction]:
-    """Run all 4 models and combine into ensemble prediction for one position/horizon."""
+                              geo_states_override: Optional[Dict] = None,
+                              regime: Optional[MarketRegime] = None) -> Optional[PricePrediction]:
+    """Run all 5 models and combine into ensemble prediction for one position/horizon."""
     if current_price_eur is None or current_price_eur <= 0:
         return None
 
@@ -492,6 +497,12 @@ def run_ensemble_for_position(ticker: str, sector: str, current_price_eur: float
                               geo_states_override)
     if m4:
         model_results["geopolitical"] = m4
+
+    # Model 5: Crisis pattern & cross-sector regime
+    if regime is not None:
+        m5 = model_crisis_regime(ticker, sector, current_price_eur, horizon_days, regime)
+        if m5:
+            model_results["crisis_regime"] = m5
 
     if not model_results:
         return None
@@ -568,8 +579,67 @@ class PredictionEngine:
         self._position_predictions: Dict[str, Dict[str, PricePrediction]] = {}  # ticker -> horizon -> pred
         self._sector_predictions: Dict[str, Dict[str, SectorPrediction]] = {}
         self._portfolio_predictions: Dict[str, PortfolioPrediction] = {}
+        self._current_regime: Optional[MarketRegime] = None
         self._last_refresh: Optional[datetime] = None
         self._running = False
+
+    def get_current_regime(self) -> Optional[MarketRegime]:
+        with self._lock:
+            return self._current_regime
+
+    def _compute_regime(self, positions, geo_states_override=None) -> Optional[MarketRegime]:
+        """Build sector price series from DB and detect market regime."""
+        from src.price_engine import get_price_engine
+
+        try:
+            pe = get_price_engine()
+
+            # Build sector-level price series (value-weighted)
+            sector_prices: Dict[str, pd.Series] = {}
+            for sector in SECTOR_CONFIG:
+                sector_positions = [p for p in positions if p.sector == sector]
+                sector_series = []
+                for pos in sector_positions:
+                    hist = get_price_history(pos.ticker, days=365)
+                    if hist and len(hist) > 30:
+                        s = pd.Series(
+                            [(h.price_eur or 0) * (pos.shares_units or 1) for h in hist],
+                            index=pd.to_datetime([h.timestamp for h in hist]),
+                        ).sort_index()
+                        # Resample to daily
+                        s = s.resample("1D").last().ffill().dropna()
+                        if len(s) > 30:
+                            sector_series.append(s)
+                if sector_series:
+                    combined = pd.concat(sector_series, axis=1).ffill().sum(axis=1)
+                    if len(combined) > 30:
+                        sector_prices[sector] = combined
+
+            # Get VIX
+            vix = pe.get_vix()
+
+            # Get geo scores
+            geo_scores = {}
+            for sector in SECTOR_CONFIG:
+                score_hist = get_sector_score_history(sector, days=7)
+                if score_hist:
+                    geo_scores[sector] = max(0.0, min(10.0, score_hist[-1].geo_score or 5.0))
+                else:
+                    geo_scores[sector] = SECTOR_CONFIG[sector]["base_score"]
+
+            regime = detect_market_regime(sector_prices, vix, geo_scores)
+            logger.info(
+                "Market regime: %s (score %.0f/100, correlation %.2f, "
+                "contagion %.0f%%, patterns: %s)",
+                regime.regime_name, regime.regime_score,
+                regime.cross_sector_correlation, regime.contagion_risk * 100,
+                ", ".join(f"{p[0]}({p[1]:.0%})" for p in regime.active_patterns) or "none",
+            )
+            return regime
+
+        except Exception as e:
+            logger.error("Regime detection failed: %s", e)
+            return None
 
     def refresh_all(self, geo_states_override: Optional[Dict] = None) -> None:
         """Generate predictions for all positions, sectors, portfolio."""
@@ -577,6 +647,9 @@ class PredictionEngine:
 
         pe = get_price_engine()
         positions = pe.get_all_positions()
+
+        # Compute market regime ONCE for all positions (cross-sector context)
+        regime = self._compute_regime(positions, geo_states_override)
 
         new_pos_preds: Dict[str, Dict[str, PricePrediction]] = {}
         new_sec_preds: Dict[str, Dict[str, SectorPrediction]] = {}
@@ -591,7 +664,7 @@ class PredictionEngine:
                 try:
                     pred = run_ensemble_for_position(
                         pos.ticker, pos.sector, pos.current_price_eur,
-                        h_name, h_days, geo_states_override,
+                        h_name, h_days, geo_states_override, regime,
                     )
                     if pred:
                         ticker_preds[h_name] = pred
@@ -763,6 +836,7 @@ class PredictionEngine:
             self._position_predictions = new_pos_preds
             self._sector_predictions = new_sec_preds
             self._portfolio_predictions = new_port_preds
+            self._current_regime = regime
             self._last_refresh = datetime.now(timezone.utc)
 
         logger.info("Predictions refreshed: %d positions, %d sectors, %d horizons",

@@ -245,5 +245,136 @@ class TestLinearRegressionModel(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestCrossCorrelation(unittest.TestCase):
+    def test_high_correlation_detected(self):
+        from src.crisis_patterns import compute_cross_sector_correlation
+        np.random.seed(42)
+        base = pd.Series(np.cumsum(np.random.randn(60)) + 100)
+        # All sectors move together (high correlation)
+        sector_prices = {
+            "ENERGY": base + np.random.randn(60) * 0.1,
+            "DEFENSE": base + np.random.randn(60) * 0.1,
+            "GOLD": base + np.random.randn(60) * 0.1,
+        }
+        corr = compute_cross_sector_correlation(sector_prices, window=30)
+        self.assertGreater(corr, 0.8)
+
+    def test_low_correlation_with_independent_sectors(self):
+        from src.crisis_patterns import compute_cross_sector_correlation
+        np.random.seed(42)
+        sector_prices = {
+            "ENERGY": pd.Series(np.cumsum(np.random.randn(60)) + 100),
+            "DEFENSE": pd.Series(np.cumsum(np.random.randn(60)) + 100),
+            "GOLD": pd.Series(np.cumsum(np.random.randn(60)) + 100),
+        }
+        corr = compute_cross_sector_correlation(sector_prices, window=30)
+        self.assertLess(corr, 0.6)
+
+    def test_insufficient_data(self):
+        from src.crisis_patterns import compute_cross_sector_correlation
+        sector_prices = {"ENERGY": pd.Series([1, 2, 3])}
+        corr = compute_cross_sector_correlation(sector_prices)
+        self.assertEqual(corr, 0.0)
+
+
+class TestVolRegime(unittest.TestCase):
+    def test_normal_regime(self):
+        from src.crisis_patterns import compute_vol_regime
+        np.random.seed(42)
+        returns = pd.Series(np.random.randn(300) * 0.01)
+        z = compute_vol_regime(returns)
+        self.assertLess(abs(z), 3.0)  # should be near zero
+
+    def test_high_vol_spike(self):
+        from src.crisis_patterns import compute_vol_regime
+        np.random.seed(42)
+        returns = pd.Series(np.random.randn(300) * 0.01)
+        # Spike vol at the end
+        returns.iloc[-20:] = np.random.randn(20) * 0.05
+        z = compute_vol_regime(returns)
+        self.assertGreater(z, 1.0)
+
+
+class TestRegimeDetection(unittest.TestCase):
+    def test_calm_regime(self):
+        from src.crisis_patterns import detect_market_regime
+        np.random.seed(42)
+        sector_prices = {
+            "ENERGY": pd.Series(np.cumsum(np.random.randn(100) * 0.5) + 100),
+            "DEFENSE": pd.Series(np.cumsum(np.random.randn(100) * 0.5) + 100),
+        }
+        geo_scores = {"ENERGY": 5.0, "DEFENSE": 5.0}
+        regime = detect_market_regime(sector_prices, vix=12.0, geo_scores=geo_scores)
+        self.assertEqual(regime.regime_name, "CALM")
+        self.assertLess(regime.regime_score, 30)
+
+    def test_crisis_high_vix(self):
+        from src.crisis_patterns import detect_market_regime
+        np.random.seed(42)
+        base = pd.Series(np.cumsum(np.random.randn(100)) + 100)
+        sector_prices = {
+            "ENERGY": base + np.random.randn(100) * 0.1,
+            "DEFENSE": base + np.random.randn(100) * 0.1,
+            "METALS": base + np.random.randn(100) * 0.1,
+        }
+        geo_scores = {"ENERGY": 9.5, "DEFENSE": 9.5, "METALS": 5.0}
+        regime = detect_market_regime(sector_prices, vix=50.0, geo_scores=geo_scores)
+        self.assertIn(regime.regime_name, ("STRESSED", "CRISIS"))
+        self.assertGreater(regime.regime_score, 40)
+
+    def test_sector_adjustments_populated(self):
+        from src.crisis_patterns import detect_market_regime
+        np.random.seed(42)
+        base = pd.Series(np.cumsum(np.random.randn(100)) + 100)
+        sector_prices = {
+            "ENERGY": base * 1.5,  # energy spiking
+            "DEFENSE": base + np.random.randn(100) * 0.1,
+        }
+        geo_scores = {"ENERGY": 9.0, "DEFENSE": 9.0}
+        regime = detect_market_regime(sector_prices, vix=30.0, geo_scores=geo_scores)
+        # Should have sector adjustments
+        self.assertIn("ENERGY", regime.sector_adjustments)
+        self.assertIn("DEFENSE", regime.sector_adjustments)
+
+
+class TestCrisisRegimeModel(unittest.TestCase):
+    def test_model_with_crisis_regime(self):
+        from src.crisis_patterns import model_crisis_regime, MarketRegime
+        regime = MarketRegime(
+            regime_name="STRESSED",
+            regime_score=60.0,
+            vix_level=35.0,
+            cross_sector_correlation=0.75,
+            vol_regime_z=2.0,
+            active_patterns=[("SUPPLY_SHOCK", 0.75)],
+            sector_adjustments={"ENERGY": 3.0, "GOLD": 1.5, "METALS": -2.0,
+                                "DEFENSE": 1.0, "BIOTECH": -1.5},
+            contagion_risk=0.6,
+            factors=["VIX at 35", "Supply shock pattern"],
+        )
+        result = model_crisis_regime("XOM", "ENERGY", 100.0, 5, regime)
+        self.assertIsNotNone(result)
+        self.assertGreater(result["predicted_pct"], 0)  # energy benefits from supply shock
+        self.assertIn("STRESSED", result["factor"])
+
+    def test_model_with_calm_regime(self):
+        from src.crisis_patterns import model_crisis_regime, MarketRegime
+        regime = MarketRegime(
+            regime_name="CALM",
+            regime_score=10.0,
+            vix_level=12.0,
+            cross_sector_correlation=0.3,
+            vol_regime_z=0.5,
+            active_patterns=[],
+            sector_adjustments={"ENERGY": 0, "GOLD": 0, "METALS": 0,
+                                "DEFENSE": 0, "BIOTECH": 0},
+            contagion_risk=0.1,
+            factors=["No crisis patterns"],
+        )
+        result = model_crisis_regime("XOM", "ENERGY", 100.0, 5, regime)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["predicted_pct"], 0.0, places=1)
+
+
 if __name__ == "__main__":
     unittest.main()

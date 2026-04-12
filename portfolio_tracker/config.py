@@ -451,10 +451,11 @@ TRANCHE_3_DAYS = 180
 PREDICTION_REFRESH_INTERVAL = 1800   # 30 minutes
 PREDICTION_MIN_HISTORY_DAYS = 30     # minimum for technical models (1-3)
 PREDICTION_ENSEMBLE_WEIGHTS = {
-    "ema_momentum":      0.25,
-    "linear_regression": 0.25,
-    "mean_reversion":    0.20,
-    "geopolitical":      0.30,
+    "ema_momentum":      0.20,
+    "linear_regression": 0.20,
+    "mean_reversion":    0.15,
+    "geopolitical":      0.25,
+    "crisis_regime":     0.20,   # cross-sector crisis pattern model
 }
 PREDICTION_HORIZONS = {
     "24h": 1,    # trading days
