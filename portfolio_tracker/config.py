@@ -444,3 +444,20 @@ ALERT_DRAWDOWN_CRITICAL = -40.0  # % drawdown → CRITICAL alert
 # ─────────────────────────────────────────────────────────────
 TRANCHE_2_DAYS = 90
 TRANCHE_3_DAYS = 180
+
+# ─────────────────────────────────────────────────────────────
+# PREDICTION ENGINE
+# ─────────────────────────────────────────────────────────────
+PREDICTION_REFRESH_INTERVAL = 1800   # 30 minutes
+PREDICTION_MIN_HISTORY_DAYS = 30     # minimum for technical models (1-3)
+PREDICTION_ENSEMBLE_WEIGHTS = {
+    "ema_momentum":      0.25,
+    "linear_regression": 0.25,
+    "mean_reversion":    0.20,
+    "geopolitical":      0.30,
+}
+PREDICTION_HORIZONS = {
+    "24h": 1,    # trading days
+    "1w":  5,
+    "1m":  21,
+}
