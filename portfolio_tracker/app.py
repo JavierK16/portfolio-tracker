@@ -394,28 +394,32 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
         drift   = pos.drift_from_target or 0
         drift_col = "#ff4444" if abs(drift) > 3 else ("#00ff88" if abs(drift) <= 1 else "#ffaa00")
 
+        # Helper: format only when value is not None (avoids 0.0 being treated as falsy)
+        def _v(val, fmt):
+            return fmt.format(val) if val is not None else "N/A"
+
         rows.append({
-            "Ticker":         pos.ticker,
-            "Name":           pos.name[:30],
-            "Sector":         pos.sector,
-            "Type":           pos.instrument_type,
-            "Ccy":            pos.currency,
-            "Shares":         f"{pos.shares_units:.2f}" if pos.shares_units else "N/A",
-            "Entry €":        f"{pos.entry_price_eur:.2f}" if pos.entry_price_eur else "N/A",
-            "Price €":        f"{pos.current_price_eur:.2f}" if pos.current_price_eur else "N/A",
-            "Value €":        f"{pos.current_value_eur:,.0f}" if pos.current_value_eur else "N/A",
-            "P&L €":          f"{pos.pnl_eur:+,.0f}" if pos.pnl_eur else "N/A",
-            "P&L %":          f"{pos.pnl_pct:+.1f}%" if pos.pnl_pct else "N/A",
-            "Day %":          f"{pos.day_change_pct:+.1f}%" if pos.day_change_pct else "N/A",
-            "Week %":         f"{pos.week_change_pct:+.1f}%" if pos.week_change_pct else "N/A",
-            "Weight %":       f"{pos.weight_current_pct:.1f}%" if pos.weight_current_pct else "N/A",
-            "Target %":       f"{pos.target_pct:.1f}%",
-            "Drift":          f"{drift:+.1f}%",
-            "Signal":         signal,
-            "Score":          f"{score:.0f}" if score else "—",
-            "Tranche":        str(pos.tranche),
-            "Status":         pos.data_status,
-            "_flags":         flags,
+            "Ticker":    pos.ticker,
+            "Name":      pos.name[:30],
+            "Sector":    pos.sector,
+            "Type":      pos.instrument_type,
+            "Ccy":       pos.currency,
+            "Shares":    _v(pos.shares_units,        "{:.2f}"),
+            "Entry €":   _v(pos.entry_price_eur,     "{:.2f}"),
+            "Price €":   _v(pos.current_price_eur,   "{:.2f}"),
+            "Value €":   _v(pos.current_value_eur,   "{:,.0f}"),
+            "P&L €":     _v(pos.pnl_eur,             "{:+,.0f}"),
+            "P&L %":     _v(pos.pnl_pct,             "{:+.2f}%"),
+            "Day %":     _v(pos.day_change_pct,      "{:+.2f}%"),
+            "Week %":    _v(pos.week_change_pct,     "{:+.2f}%"),
+            "Weight %":  _v(pos.weight_current_pct,  "{:.1f}%"),
+            "Target %":  f"{pos.target_pct:.1f}%",
+            "Drift":     f"{drift:+.1f}%",
+            "Signal":    signal,
+            "Score":     f"{score:.0f}" if score is not None else "—",
+            "Tranche":   str(pos.tranche),
+            "Status":    pos.data_status,
+            "_flags":    flags,
         })
 
     df = pd.DataFrame(rows)

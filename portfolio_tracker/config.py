@@ -255,11 +255,18 @@ YF_TICKER_MAP = {
 #   SETM.L  — remapped to SETM (NYSE) which quotes USD
 #   BTEC.AS — remapped to BTEC.L (LSE) which quotes USD
 YF_CURRENCY_OVERRIDE = {
+    # LSE tickers priced in pence → after ÷100 use GBP
     "SPOG.L":  "GBP",   # GBp ÷100 → GBP → EUR
     "BA.L":    "GBP",   # GBp ÷100 → GBP → EUR
-    "NATO.L":  "USD",   # LSE listing quotes USD
-    "SETM.L":  "USD",   # NYSE listing quotes USD
-    "BTEC.AS": "USD",   # LSE BTEC.L quotes USD
+    # LSE ETFs whose Yahoo quote currency differs from portfolio config
+    "NATO.L":  "USD",   # LSE listing quotes USD (not EUR)
+    # Remapped tickers
+    "SETM.L":  "USD",   # NYSE SETM quotes USD
+    "BTEC.AS": "USD",   # LSE BTEC.L quotes USD (not EUR)
+    # Portfolio states NOK (home market) but Yahoo fetches NYSE listing in USD
+    "EQNR":    "USD",
+    # Portfolio states USD (underlying) but XETRA listing quotes EUR
+    "VVMX.DE": "EUR",
 }
 
 # Portfolio tickers whose Yahoo Finance price arrives in pence (GBp) → divide by 100
