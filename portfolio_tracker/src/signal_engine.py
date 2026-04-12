@@ -135,7 +135,8 @@ class SignalEngine:
 
         # ── Factor 1: Sector Geo Score (35%) ─────────────────
         sector_score_0_10 = self._geo.get_sector_score(pos.sector)
-        factors.geo_score = min(100.0, sector_score_0_10 * 10.0)
+        # Geo score is guaranteed 0–10; scale to 0–100 for composite weighting
+        factors.geo_score = max(0.0, min(100.0, sector_score_0_10 * 10.0))
 
         # ── Factor 2: Price Momentum (20%) ───────────────────
         factors.momentum_score = self._momentum_score(pos)

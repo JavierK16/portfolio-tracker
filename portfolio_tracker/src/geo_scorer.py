@@ -422,7 +422,7 @@ class GeopoliticalScorer:
             total_drift = news_drift + var_drift
             total_drift = max(-2.5, min(2.5, total_drift))
 
-            new_score = round(base + total_drift, 2)
+            new_score = round(max(0.0, min(10.0, base + total_drift)), 2)
             self._sector_scores[sector] = new_score
             save_sector_score(sector, new_score)
 
