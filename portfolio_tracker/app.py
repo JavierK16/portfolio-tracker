@@ -369,28 +369,58 @@ def render_sector_overview(
                 unsafe_allow_html=True,
             )
 
-            # Mini sparkline (sector value over 30d)
-            spark_data = []
+            # ── Sector sparkline ──────────────────────────────
+            # Build per-ticker daily price series, align to common
+            # date index, forward-fill gaps, then sum to get total
+            # sector value per day. Avoids spikes from misaligned timestamps.
+            ticker_series = {}
             for p in sector_positions:
                 hist = get_price_history(p.ticker, days=30)
-                for h in hist:
-                    shares = p.shares_units or 0
-                    spark_data.append({"ts": h.timestamp, "val": (h.price_eur or 0) * shares})
-            if spark_data:
-                spark_df = pd.DataFrame(spark_data).groupby("ts")["val"].sum().reset_index()
-                spark_df = spark_df.sort_values("ts")
-                fig = go.Figure(go.Scatter(
-                    x=spark_df["ts"], y=spark_df["val"],
-                    mode="lines", line=dict(color=SIGNAL_COLOURS.get(dom_signal, "#888"), width=1),
-                    fill="tozeroy",
-                ))
-                fig.update_layout(
-                    height=60, margin=dict(l=0, r=0, t=0, b=0),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(visible=False), yaxis=dict(visible=False),
-                    showlegend=False,
+                if not hist:
+                    continue
+                shares = p.shares_units or 0
+                s = pd.Series(
+                    {h.timestamp: (h.price_eur or 0) * shares for h in hist},
+                    name=p.ticker,
                 )
-                st.plotly_chart(fig, use_container_width=True, key=f"spark_{sector}")
+                # Resample to 1-hour buckets to smooth intra-day noise
+                s.index = pd.to_datetime(s.index, utc=True)
+                s = s.resample("1h").last().ffill()
+                ticker_series[p.ticker] = s
+
+            if ticker_series:
+                combined = pd.DataFrame(ticker_series)
+                # Forward-fill so every ticker has a value at every timestamp
+                combined = combined.ffill().dropna(how="all")
+                sector_total = combined.sum(axis=1)
+
+                # Resample to daily for a clean sparkline
+                daily = sector_total.resample("1D").last().dropna()
+
+                # Need at least 2 points to draw a line
+                if len(daily) >= 2:
+                    line_col = SIGNAL_COLOURS.get(dom_signal, "#888")
+                    fig = go.Figure(go.Scatter(
+                        x=daily.index, y=daily.values,
+                        mode="lines",
+                        line=dict(color=line_col, width=2),
+                        fill="tozeroy",
+                        fillcolor=line_col.replace(")", ",0.15)").replace("rgb", "rgba")
+                                  if line_col.startswith("rgb") else line_col + "26",
+                    ))
+                    fig.update_layout(
+                        height=70,
+                        margin=dict(l=0, r=0, t=4, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(visible=False),
+                        yaxis=dict(visible=False),
+                        showlegend=False,
+                    )
+                    st.plotly_chart(fig, use_container_width=True,
+                                   key=f"spark_{sector}")
+                else:
+                    st.caption("📊 Building history…")
 
 
 # ─────────────────────────────────────────────────────────────
