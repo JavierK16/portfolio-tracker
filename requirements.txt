@@ -1,0 +1,11 @@
+streamlit>=1.30.0
+yfinance>=0.2.31
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.18.0
+sqlalchemy>=2.0.0
+feedparser>=6.0.0
+requests>=2.31.0
+rich>=13.0.0
+plyer>=2.1.0
+scikit-learn>=1.4.0

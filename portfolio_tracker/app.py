@@ -34,6 +34,8 @@ from src.price_engine import get_price_engine, PositionData
 from src.geo_scorer import get_geo_scorer, GeoContext
 from src.signal_engine import get_signal_engine, SignalResult
 from src.alert_manager import get_alert_manager
+from src.prediction_engine import get_prediction_engine, PricePrediction, SectorPrediction, PortfolioPrediction
+from src.prediction_accuracy import get_accuracy_tracker
 
 # ─────────────────────────────────────────────────────────────
 # LOGGING
@@ -105,10 +107,16 @@ def _init_system():
     am = get_alert_manager()
     am.start_background_checks()
 
-    return pe, gs, se, am
+    pred = get_prediction_engine()
+    pred.start_background_refresh()
+
+    acc = get_accuracy_tracker()
+    acc.start_background_checks()
+
+    return pe, gs, se, am, pred, acc
 
 
-price_engine, geo_scorer, signal_engine, alert_manager = _init_system()
+price_engine, geo_scorer, signal_engine, alert_manager, prediction_engine, accuracy_tracker = _init_system()
 
 # ─────────────────────────────────────────────────────────────
 # HELPERS
@@ -838,6 +846,361 @@ def render_tranche_tracker() -> None:
 
 
 # ─────────────────────────────────────────────────────────────
+# SECTION 8 — PREDICTIONS
+# ─────────────────────────────────────────────────────────────
+
+def render_predictions(geo_context: GeoContext) -> None:
+    st.subheader("Predictions")
+    st.caption(
+        "These are statistical model estimates, not financial advice. "
+        "Past performance and model predictions do not guarantee future results. "
+        "Always consult a licensed financial advisor before making investment decisions."
+    )
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Forecast Overview", "Position Forecasts",
+        "Confidence Intervals", "Prediction Accuracy",
+        "Geopolitical Scenario Analysis",
+    ])
+
+    positions = price_engine.get_all_positions()
+    pos_preds = prediction_engine.get_all_position_predictions()
+    sec_preds = prediction_engine.get_all_sector_predictions()
+    port_preds = prediction_engine.get_all_portfolio_predictions()
+
+    # ── Tab 1: Forecast Overview ──────────────────────────────
+    with tab1:
+        if not port_preds:
+            st.info("Predictions are being generated. Check back in a few minutes.")
+        else:
+            cols = st.columns(3)
+            for i, h in enumerate(["24h", "1w", "1m"]):
+                pp = port_preds.get(h)
+                if not pp:
+                    continue
+                labels = {"24h": "Next 24 Hours", "1w": "Next 1 Week", "1m": "Next 1 Month"}
+                dir_arrow = {"UP": "^", "DOWN": "v", "FLAT": "~"}.get(pp.direction, "~")
+                dir_col = {"UP": "#00ff88", "DOWN": "#ff4444", "FLAT": "#888"}.get(pp.direction, "#888")
+                conf_col = {"HIGH": "#00ff88", "MEDIUM": "#ffaa00", "LOW": "#ff4444"}.get(pp.overall_confidence, "#888")
+
+                with cols[i]:
+                    st.markdown(
+                        f"**{labels.get(h, h)}**<br>"
+                        f"Predicted: **{_fmt_eur(pp.predicted_value_eur)}**<br>"
+                        f'<span style="color:{dir_col};font-size:1.3rem">{dir_arrow} {pp.predicted_change_pct:+.2f}%</span><br>'
+                        f'Confidence: <span style="color:{conf_col}">{pp.overall_confidence}</span><br>'
+                        f"P&L: {_fmt_eur(pp.predicted_pnl_eur)}<br>"
+                        f"<small>95% CI: {_fmt_eur(pp.ci_95[0])} — {_fmt_eur(pp.ci_95[1])}</small><br>"
+                        f"<small>{pp.risk_summary}</small>",
+                        unsafe_allow_html=True,
+                    )
+
+            # Sector forecast bars
+            st.markdown("---")
+            st.markdown("**Sector Forecast (% Change)**")
+            for h in ["24h", "1w", "1m"]:
+                sector_data = []
+                for sector in SECTOR_CONFIG:
+                    sp = sec_preds.get(sector, {}).get(h)
+                    if sp:
+                        sector_data.append({
+                            "Sector": sector,
+                            "Change %": sp.predicted_change_pct,
+                            "Direction": sp.direction,
+                        })
+                if sector_data:
+                    df = pd.DataFrame(sector_data)
+                    colours = ["#00ff88" if r >= 0 else "#ff4444" for r in df["Change %"]]
+                    fig = go.Figure(go.Bar(
+                        x=df["Change %"], y=df["Sector"],
+                        orientation="h",
+                        marker_color=colours,
+                        text=[f"{v:+.2f}%" for v in df["Change %"]],
+                        textposition="outside",
+                    ))
+                    fig.update_layout(
+                        title=f"Sector Forecast — {h}",
+                        height=200, margin=dict(l=80, r=40, t=40, b=20),
+                        paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
+                        font=dict(color="#ccc"), xaxis_title="Predicted Change %",
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key=f"sec_bar_{h}")
+
+    # ── Tab 2: Position Forecasts ─────────────────────────────
+    with tab2:
+        if not pos_preds:
+            st.info("No position predictions yet.")
+        else:
+            rows = []
+            for pos in positions:
+                tp = pos_preds.get(pos.ticker, {})
+                row = {
+                    "Ticker": pos.ticker,
+                    "Current EUR": f"{pos.current_price_eur:.2f}" if pos.current_price_eur else "N/A",
+                }
+                for h in ["24h", "1w", "1m"]:
+                    pred = tp.get(h)
+                    if pred:
+                        row[f"Pred {h} EUR"] = f"{pred.predicted_price_eur:.2f}"
+                        row[f"{h} %"] = f"{pred.predicted_change_pct:+.2f}%"
+                    else:
+                        row[f"Pred {h} EUR"] = "N/A"
+                        row[f"{h} %"] = "N/A"
+
+                # Use first available horizon for direction/confidence/factor
+                first_pred = tp.get("24h") or tp.get("1w") or tp.get("1m")
+                row["Direction"] = first_pred.direction if first_pred else "N/A"
+                row["Confidence"] = first_pred.confidence_level if first_pred else "N/A"
+                row["Top Factor"] = first_pred.factors[0][:60] if first_pred and first_pred.factors else "N/A"
+                rows.append(row)
+
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+
+            # Expandable detail
+            sel = st.selectbox(
+                "Expand position detail:",
+                options=[""] + list(pos_preds.keys()),
+                format_func=lambda x: x if x else "-- select --",
+                key="pred_detail_ticker",
+            )
+            if sel and sel in pos_preds:
+                for h in ["24h", "1w", "1m"]:
+                    pred = pos_preds[sel].get(h)
+                    if not pred:
+                        continue
+                    with st.expander(f"{sel} — {h}", expanded=(h == "24h")):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown(
+                                f"**Direction:** {pred.direction} | **Confidence:** {pred.confidence_level}<br>"
+                                f"**Predicted:** {pred.predicted_price_eur:.2f} EUR ({pred.predicted_change_pct:+.2f}%)<br>"
+                                f"**80% CI:** {pred.ci_80[0]:.2f} — {pred.ci_80[1]:.2f}<br>"
+                                f"**95% CI:** {pred.ci_95[0]:.2f} — {pred.ci_95[1]:.2f}<br>"
+                                f"**Model:** {pred.model_used}",
+                                unsafe_allow_html=True,
+                            )
+                        with c2:
+                            st.markdown("**Model Scores (% change)**")
+                            for model, score in pred.model_scores.items():
+                                st.text(f"  {model}: {score:+.2f}%")
+                            st.markdown("**Top Factors**")
+                            for f in pred.factors:
+                                st.text(f"  - {f}")
+                        if pred.warning:
+                            st.warning(pred.warning)
+
+    # ── Tab 3: Confidence Intervals (fan charts) ─────────────
+    with tab3:
+        if not pos_preds:
+            st.info("No predictions yet for fan charts.")
+        else:
+            sel_fan = st.selectbox(
+                "Select position for fan chart:",
+                options=list(pos_preds.keys()),
+                key="fan_ticker",
+            )
+            if sel_fan and sel_fan in pos_preds:
+                preds = pos_preds[sel_fan]
+                pos_obj = next((p for p in positions if p.ticker == sel_fan), None)
+                current = pos_obj.current_price_eur if pos_obj else 0
+
+                if current and preds:
+                    # Build forward-looking points
+                    today = datetime.now(timezone.utc)
+                    dates = [today]
+                    central = [current]
+                    ci80_lo = [current]
+                    ci80_hi = [current]
+                    ci95_lo = [current]
+                    ci95_hi = [current]
+
+                    for h_name, h_days in [("24h", 1), ("1w", 5), ("1m", 21)]:
+                        pred = preds.get(h_name)
+                        if pred:
+                            dates.append(today + timedelta(days=h_days))
+                            central.append(pred.predicted_price_eur)
+                            ci80_lo.append(pred.ci_80[0])
+                            ci80_hi.append(pred.ci_80[1])
+                            ci95_lo.append(pred.ci_95[0])
+                            ci95_hi.append(pred.ci_95[1])
+
+                    fig = go.Figure()
+                    # 95% CI band
+                    fig.add_trace(go.Scatter(
+                        x=dates + dates[::-1],
+                        y=ci95_hi + ci95_lo[::-1],
+                        fill="toself", fillcolor="rgba(100,100,255,0.1)",
+                        line=dict(color="rgba(0,0,0,0)"), name="95% CI",
+                    ))
+                    # 80% CI band
+                    fig.add_trace(go.Scatter(
+                        x=dates + dates[::-1],
+                        y=ci80_hi + ci80_lo[::-1],
+                        fill="toself", fillcolor="rgba(100,100,255,0.25)",
+                        line=dict(color="rgba(0,0,0,0)"), name="80% CI",
+                    ))
+                    # Central line
+                    fig.add_trace(go.Scatter(
+                        x=dates, y=central,
+                        mode="lines+markers", name="Predicted",
+                        line=dict(color="#00aaff", width=2),
+                    ))
+                    # Current price dot
+                    fig.add_trace(go.Scatter(
+                        x=[today], y=[current],
+                        mode="markers", name="Current",
+                        marker=dict(color="red", size=10),
+                    ))
+                    fig.update_layout(
+                        title=f"{sel_fan} — Price Forecast Fan Chart",
+                        height=400, yaxis_title="Price (EUR)",
+                        paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
+                        font=dict(color="#ccc"),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Tab 4: Prediction Accuracy ────────────────────────────
+    with tab4:
+        metrics = accuracy_tracker.get_metrics(days=30)
+        if not metrics:
+            st.info(
+                "No matured predictions yet. Accuracy tracking begins after predictions "
+                "reach their target dates (24h for first results)."
+            )
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Direction Accuracy", f"{metrics['direction_accuracy_pct']:.1f}%")
+            c2.metric("80% CI Hit Rate", f"{metrics['ci80_hit_rate']:.1f}%",
+                       help="Target: ~80%")
+            c3.metric("MAE", f"{metrics['mae']:.2f}%")
+            c4.metric("Total Predictions", str(metrics["total_predictions"]))
+
+            # By horizon
+            by_h = metrics.get("by_horizon", {})
+            if by_h:
+                st.markdown("**Accuracy by Horizon**")
+                h_rows = []
+                for h, m in by_h.items():
+                    h_rows.append({
+                        "Horizon": h, "Count": m["total"],
+                        "Direction %": f"{m['direction_accuracy']:.1f}%",
+                        "CI80 Hit %": f"{m['ci80_hit_rate']:.1f}%",
+                        "MAE": f"{m['mae']:.2f}%",
+                    })
+                st.dataframe(pd.DataFrame(h_rows), use_container_width=True, hide_index=True)
+
+            # By sector
+            by_s = metrics.get("by_sector", {})
+            if by_s:
+                st.markdown("**Accuracy by Sector**")
+                s_rows = []
+                for sec, m in by_s.items():
+                    s_rows.append({
+                        "Sector": sec, "Count": m["total"],
+                        "Direction %": f"{m['direction_accuracy']:.1f}%",
+                        "MAE": f"{m['mae']:.2f}%",
+                    })
+                st.dataframe(pd.DataFrame(s_rows), use_container_width=True, hide_index=True)
+
+    # ── Tab 5: Geopolitical Scenario Analysis ─────────────────
+    with tab5:
+        st.markdown("**What-If Scenario Analysis**")
+        st.caption("Adjust geopolitical variables to see how predictions would change.")
+
+        from config import GEO_VARIABLES_DEFAULT
+
+        geo_options = {
+            "HORMUZ_STATUS":      ["OPEN", "PARTIAL", "CLOSED"],
+            "IRAN_CONFLICT":      ["ACTIVE", "CEASEFIRE", "RESOLVED"],
+            "UKRAINE_WAR":        ["ESCALATING", "STALEMATE", "DE-ESCALATING", "RESOLVED"],
+            "US_CHINA_RELATIONS": ["HOSTILE", "TENSE", "NEUTRAL", "COOPERATIVE"],
+            "NATO_SPENDING":      ["DECLINING", "STABLE", "INCREASING", "ACCELERATING"],
+        }
+
+        # Current values
+        db_states = {}
+        try:
+            from src.database import get_geo_states as _get_gs
+            raw = _get_gs()
+            db_states = {k: v.current_value for k, v in raw.items()}
+        except Exception:
+            pass
+
+        scenario_vars = {}
+        cols = st.columns(5)
+        for i, (var, options) in enumerate(geo_options.items()):
+            current = db_states.get(var, GEO_VARIABLES_DEFAULT.get(var, options[0]))
+            idx = options.index(current) if current in options else 0
+            with cols[i]:
+                scenario_vars[var] = st.selectbox(
+                    var.replace("_", " ").title(),
+                    options=options,
+                    index=idx,
+                    key=f"scenario_{var}",
+                )
+
+        if st.button("Run Scenario", key="run_scenario"):
+            with st.spinner("Running scenario analysis..."):
+                scenario_results = prediction_engine.run_scenario(scenario_vars)
+
+            if not scenario_results:
+                st.warning("Could not generate scenario predictions.")
+            else:
+                st.markdown("---")
+                st.markdown("**Scenario vs Current Forecast**")
+
+                rows = []
+                for h in ["24h", "1w", "1m"]:
+                    current_pp = port_preds.get(h)
+                    scenario_pp = scenario_results.get(h)
+                    if current_pp and scenario_pp:
+                        delta = scenario_pp.predicted_change_pct - current_pp.predicted_change_pct
+                        rows.append({
+                            "Horizon": h,
+                            "Current Forecast": f"{current_pp.predicted_change_pct:+.2f}%",
+                            "Scenario Forecast": f"{scenario_pp.predicted_change_pct:+.2f}%",
+                            "Delta": f"{delta:+.2f}%",
+                            "Scenario Direction": scenario_pp.direction,
+                        })
+                if rows:
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                # Sector breakdown
+                st.markdown("**Sector Impact**")
+                sec_rows = []
+                for sector in SECTOR_CONFIG:
+                    for h in ["1w"]:  # Show 1-week horizon for sector detail
+                        cur_sp = sec_preds.get(sector, {}).get(h)
+                        # Get scenario sector predictions
+                        scen_pp = scenario_results.get(h)
+                        if cur_sp and scen_pp:
+                            scen_sp = next(
+                                (s for s in scen_pp.sector_predictions if s.sector == sector),
+                                None,
+                            )
+                            if scen_sp:
+                                delta = scen_sp.predicted_change_pct - cur_sp.predicted_change_pct
+                                sec_rows.append({
+                                    "Sector": sector,
+                                    "Current 1W": f"{cur_sp.predicted_change_pct:+.2f}%",
+                                    "Scenario 1W": f"{scen_sp.predicted_change_pct:+.2f}%",
+                                    "Delta": f"{delta:+.2f}%",
+                                })
+                if sec_rows:
+                    st.dataframe(pd.DataFrame(sec_rows), use_container_width=True, hide_index=True)
+
+                    # Highlight biggest movers
+                    biggest = max(sec_rows, key=lambda r: abs(float(r["Delta"].replace("%", ""))))
+                    delta_val = float(biggest["Delta"].replace("%", ""))
+                    verb = "gain" if delta_val > 0 else "lose"
+                    st.success(
+                        f"Biggest mover: **{biggest['Sector']}** would {verb} "
+                        f"**{biggest['Delta']}** under this scenario."
+                    )
+
+
+# ─────────────────────────────────────────────────────────────
 # MAIN RENDER LOOP
 # ─────────────────────────────────────────────────────────────
 
@@ -871,6 +1234,9 @@ def main():
     st.markdown("---")
 
     render_charts(geo_context)
+    st.markdown("---")
+
+    render_predictions(geo_context)
     st.markdown("---")
 
     render_tranche_tracker()

@@ -95,6 +95,33 @@ class SectorScoreHistory(Base):
     geo_score = Column(Float, nullable=True)
 
 
+class Prediction(Base):
+    __tablename__ = "predictions"
+    id                   = Column(Integer, primary_key=True, autoincrement=True)
+    ticker               = Column(String(20), nullable=True, index=True)
+    sector               = Column(String(20), nullable=True)
+    level                = Column(String(20), nullable=False)  # POSITION / SECTOR / PORTFOLIO
+    horizon              = Column(String(10), nullable=False, index=True)  # 24h / 1w / 1m
+    generated_at         = Column(DateTime, nullable=False, index=True)
+    target_date          = Column(DateTime, nullable=False, index=True)
+    current_price_eur    = Column(Float, nullable=True)
+    predicted_price_eur  = Column(Float, nullable=True)
+    predicted_change_pct = Column(Float, nullable=True)
+    direction            = Column(String(10), nullable=True)
+    confidence_level     = Column(String(10), nullable=True)
+    ci_80_lower          = Column(Float, nullable=True)
+    ci_80_upper          = Column(Float, nullable=True)
+    ci_95_lower          = Column(Float, nullable=True)
+    ci_95_upper          = Column(Float, nullable=True)
+    model_used           = Column(String(50), nullable=True)
+    factors_json         = Column(Text, nullable=True)
+    # Filled in later by accuracy tracker
+    actual_price_eur     = Column(Float, nullable=True)
+    actual_change_pct    = Column(Float, nullable=True)
+    was_correct_direction = Column(Boolean, nullable=True)
+    was_within_ci80      = Column(Boolean, nullable=True)
+
+
 class SystemConfig(Base):
     __tablename__ = "system_config"
     key   = Column(String(100), primary_key=True)
@@ -387,6 +414,127 @@ def get_recent_news(hours: int = 48, limit: int = 100):
             .limit(limit)
             .all()
         )
+
+
+def save_prediction(ticker: Optional[str], sector: Optional[str], level: str,
+                    horizon: str, target_date: datetime,
+                    current_price_eur: Optional[float],
+                    predicted_price_eur: Optional[float],
+                    predicted_change_pct: Optional[float],
+                    direction: Optional[str], confidence_level: Optional[str],
+                    ci_80: Optional[tuple] = None, ci_95: Optional[tuple] = None,
+                    model_used: Optional[str] = None,
+                    factors_json: Optional[str] = None) -> int:
+    with get_session() as s:
+        p = Prediction(
+            ticker=ticker, sector=sector, level=level, horizon=horizon,
+            generated_at=datetime.now(timezone.utc), target_date=target_date,
+            current_price_eur=current_price_eur,
+            predicted_price_eur=predicted_price_eur,
+            predicted_change_pct=predicted_change_pct,
+            direction=direction, confidence_level=confidence_level,
+            ci_80_lower=ci_80[0] if ci_80 else None,
+            ci_80_upper=ci_80[1] if ci_80 else None,
+            ci_95_lower=ci_95[0] if ci_95 else None,
+            ci_95_upper=ci_95[1] if ci_95 else None,
+            model_used=model_used, factors_json=factors_json,
+        )
+        s.add(p)
+        s.commit()
+        return p.id
+
+
+def get_latest_predictions(level: str = "POSITION", horizon: Optional[str] = None,
+                           limit: int = 200):
+    with get_session() as s:
+        q = s.query(Prediction).filter(Prediction.level == level)
+        if horizon:
+            q = q.filter(Prediction.horizon == horizon)
+        return q.order_by(Prediction.generated_at.desc()).limit(limit).all()
+
+
+def get_matured_predictions():
+    """Return predictions whose target_date has passed and have no actuals yet."""
+    now = datetime.now(timezone.utc)
+    with get_session() as s:
+        return (
+            s.query(Prediction)
+            .filter(
+                Prediction.target_date <= now,
+                Prediction.actual_price_eur == None,
+            )
+            .order_by(Prediction.target_date.asc())
+            .all()
+        )
+
+
+def update_prediction_actuals(pred_id: int, actual_price_eur: float,
+                              actual_change_pct: float,
+                              was_correct_direction: bool,
+                              was_within_ci80: bool) -> None:
+    with get_session() as s:
+        p = s.get(Prediction, pred_id)
+        if p:
+            p.actual_price_eur = actual_price_eur
+            p.actual_change_pct = actual_change_pct
+            p.was_correct_direction = was_correct_direction
+            p.was_within_ci80 = was_within_ci80
+            s.commit()
+
+
+def get_prediction_accuracy_metrics(days: int = 30) -> dict:
+    """Compute rolling accuracy metrics for matured predictions."""
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    with get_session() as s:
+        rows = (
+            s.query(Prediction)
+            .filter(
+                Prediction.actual_price_eur != None,
+                Prediction.generated_at >= cutoff,
+            )
+            .all()
+        )
+    if not rows:
+        return {}
+
+    total = len(rows)
+    direction_correct = sum(1 for r in rows if r.was_correct_direction)
+    ci80_hits = sum(1 for r in rows if r.was_within_ci80)
+    mae_vals = [abs((r.predicted_change_pct or 0) - (r.actual_change_pct or 0)) for r in rows]
+
+    # By horizon
+    by_horizon = {}
+    for h in ("24h", "1w", "1m"):
+        h_rows = [r for r in rows if r.horizon == h]
+        if h_rows:
+            by_horizon[h] = {
+                "total": len(h_rows),
+                "direction_accuracy": sum(1 for r in h_rows if r.was_correct_direction) / len(h_rows) * 100,
+                "ci80_hit_rate": sum(1 for r in h_rows if r.was_within_ci80) / len(h_rows) * 100,
+                "mae": sum(abs((r.predicted_change_pct or 0) - (r.actual_change_pct or 0)) for r in h_rows) / len(h_rows),
+            }
+
+    # By sector
+    by_sector = {}
+    sectors_seen = set(r.sector for r in rows if r.sector)
+    for sec in sectors_seen:
+        s_rows = [r for r in rows if r.sector == sec]
+        if s_rows:
+            by_sector[sec] = {
+                "total": len(s_rows),
+                "direction_accuracy": sum(1 for r in s_rows if r.was_correct_direction) / len(s_rows) * 100,
+                "mae": sum(abs((r.predicted_change_pct or 0) - (r.actual_change_pct or 0)) for r in s_rows) / len(s_rows),
+            }
+
+    return {
+        "total_predictions": total,
+        "direction_accuracy_pct": direction_correct / total * 100,
+        "ci80_hit_rate": ci80_hits / total * 100,
+        "mae": sum(mae_vals) / total,
+        "by_horizon": by_horizon,
+        "by_sector": by_sector,
+    }
 
 
 def init_db() -> None:
