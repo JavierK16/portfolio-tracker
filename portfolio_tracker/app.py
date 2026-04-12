@@ -352,7 +352,7 @@ def render_sector_overview(
         total_val   = price_engine.get_portfolio_value()
         alloc_pct   = (alloc_eur / total_val * 100) if total_val else 0
 
-        geo_score   = geo_context.sector_scores.get(sector, cfg["base_score"])
+        geo_score   = max(0.0, min(10.0, geo_context.sector_scores.get(sector, cfg["base_score"])))
         score_delta = geo_context.sector_score_changes.get(sector, 0)
         arrow = "▲" if score_delta > 0 else ("▼" if score_delta < 0 else "→")
         arrow_col = "#00ff88" if score_delta > 0 else ("#ff4444" if score_delta < 0 else "#888")

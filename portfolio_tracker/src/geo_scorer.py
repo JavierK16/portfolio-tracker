@@ -192,7 +192,8 @@ class GeopoliticalScorer:
 
             return GeoContext(
                 variables=variables,
-                sector_scores=dict(self._sector_scores),
+                sector_scores={s: max(0.0, min(10.0, v))
+                               for s, v in self._sector_scores.items()},
                 sector_score_changes=score_changes,
                 recent_news=list(self._recent_news),
                 last_updated=self._last_refresh,
@@ -201,7 +202,8 @@ class GeopoliticalScorer:
     def get_sector_score(self, sector: str) -> float:
         with self._lock:
             from config import SECTOR_CONFIG
-            return self._sector_scores.get(sector, SECTOR_CONFIG.get(sector, {}).get("base_score", 5.0))
+            raw = self._sector_scores.get(sector, SECTOR_CONFIG.get(sector, {}).get("base_score", 5.0))
+            return max(0.0, min(10.0, raw))  # always clamp 0–10
 
     def last_refresh_time(self) -> Optional[datetime]:
         with self._lock:
