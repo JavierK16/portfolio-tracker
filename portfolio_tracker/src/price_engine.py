@@ -394,12 +394,17 @@ class PriceEngine:
             pos.pnl_pct = 0.0
 
         # ── Momentum ───────────────────────────────────────────
-        pos.day_change_pct   = self._pct_change(closes, 1)
+        # Day change is only meaningful when markets are actually open today.
+        # With daily data, iloc[-1] is the last *trading* day's close — on a
+        # weekend or holiday that is Friday, so "day %" would show Friday's
+        # move vs Thursday, which is misleading. Force 0.0 when closed.
+        market_open = self.is_market_hours()
+        pos.day_change_pct   = self._pct_change(closes, 1) if market_open else 0.0
         pos.week_change_pct  = self._pct_change(closes, 5)
         pos.month_change_pct = self._pct_change(closes, 21)
 
         # ── Data status ────────────────────────────────────────
-        pos.data_status = "LIVE" if self.is_market_hours() else "DELAYED"
+        pos.data_status = "LIVE" if market_open else "DELAYED"
         pos.error_msg   = None
 
         # ── Persist snapshot ───────────────────────────────────

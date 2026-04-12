@@ -217,23 +217,42 @@ def render_header(geo_context: GeoContext) -> None:
 
     col_refresh, col_val, col_dpnl, col_tpnl, col_alerts, col_btn = st.columns([2, 2, 2, 2, 2, 1])
 
+    market_open = price_engine.is_market_hours()
+    mkt_label   = "🟢 Markets open" if market_open else "🔴 Markets closed"
+    mkt_colour  = "#00ff88"         if market_open else "#ff6644"
+
     with col_refresh:
         st.markdown(
             f"**Last refresh:** {_hours_ago(last_ref)}<br>"
-            f"<small>Signals: {_hours_ago(signal_engine.last_refresh_time())}</small>",
+            f"<small>Signals: {_hours_ago(signal_engine.last_refresh_time())}</small><br>"
+            f'<span style="color:{mkt_colour};font-size:0.8rem">{mkt_label}</span>',
             unsafe_allow_html=True,
         )
 
     with col_val:
         day_pct = (day_pnl / total_cost * 100) if total_cost else 0
-        st.metric("Portfolio Value", _fmt_eur(total_val), f"{_fmt_pct(day_pct)} today")
+        day_label = _fmt_pct(day_pct) + " today" if market_open else "Mkt closed — 0% today"
+        st.metric("Portfolio Value", _fmt_eur(total_val), day_label)
 
     with col_dpnl:
-        st.metric("Day P&L", _fmt_eur(day_pnl, 0), delta=f"{_fmt_pct(day_pct)}")
+        dpnl_label = _fmt_eur(day_pnl, 0) if market_open else "€0 (closed)"
+        st.metric("Day P&L", dpnl_label,
+                  delta=_fmt_pct(day_pct) if market_open else None,
+                  help="Profit/loss today based on live price moves. Zero when markets are closed.")
 
     with col_tpnl:
         total_pct = (total_pnl / total_cost * 100) if total_cost else 0
-        st.metric("Total P&L", _fmt_eur(total_pnl, 0), f"{_fmt_pct(total_pct)} since entry")
+        st.metric(
+            "Total P&L since entry",
+            _fmt_eur(total_pnl, 0),
+            f"{_fmt_pct(total_pct)}",
+            help=(
+                "Total profit/loss in EUR across all positions since your entry prices "
+                "were recorded on first run. "
+                f"Cost basis: {_fmt_eur(total_cost)} | "
+                "P&L = current value − cost basis."
+            ),
+        )
 
     with col_alerts:
         badge_parts = []
