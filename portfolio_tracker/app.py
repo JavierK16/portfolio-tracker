@@ -408,14 +408,19 @@ def render_sector_overview(
 
                 # Need at least 2 points to draw a line
                 if len(daily) >= 2:
-                    line_col = SIGNAL_COLOURS.get(dom_signal, "#888")
+                    line_col = SIGNAL_COLOURS.get(dom_signal, "#888888")
+                    # Convert hex to rgba for fill transparency
+                    hc = line_col.lstrip("#")
+                    if len(hc) == 3:
+                        hc = "".join(c * 2 for c in hc)
+                    r, g, b = int(hc[:2], 16), int(hc[2:4], 16), int(hc[4:6], 16)
+                    fill_col = f"rgba({r},{g},{b},0.15)"
                     fig = go.Figure(go.Scatter(
                         x=daily.index, y=daily.values,
                         mode="lines",
                         line=dict(color=line_col, width=2),
                         fill="tozeroy",
-                        fillcolor=line_col.replace(")", ",0.15)").replace("rgb", "rgba")
-                                  if line_col.startswith("rgb") else line_col + "26",
+                        fillcolor=fill_col,
                     ))
                     fig.update_layout(
                         height=70,
