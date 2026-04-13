@@ -221,7 +221,7 @@ class TestDirectionAndConfidence(unittest.TestCase):
         self.assertEqual(_determine_confidence(results, 3.0), "LOW")
 
 
-class TestLinearRegressionModel(unittest.TestCase):
+class TestRandomForestModel(unittest.TestCase):
     def _make_prices(self, n=100, trend=0.001):
         np.random.seed(42)
         dates = pd.date_range(end=datetime.now(timezone.utc), periods=n, freq="D")
@@ -229,20 +229,82 @@ class TestLinearRegressionModel(unittest.TestCase):
         return pd.Series(vals, index=dates)
 
     def test_runs_with_sufficient_data(self):
-        from src.prediction_engine import _model_linear_regression
+        from src.prediction_engine import _model_random_forest
         prices = self._make_prices(100)
-        result = _model_linear_regression(prices, horizon_days=5)
-        # May be None if sklearn not installed
+        result = _model_random_forest(prices, horizon_days=5)
         if result is not None:
             self.assertIn("predicted_pct", result)
             self.assertIn("ci_80", result)
 
     def test_insufficient_data_returns_none(self):
-        from src.prediction_engine import _model_linear_regression
+        from src.prediction_engine import _model_random_forest
         dates = pd.date_range(end=datetime.now(timezone.utc), periods=15, freq="D")
         prices = pd.Series(np.linspace(100, 105, 15), index=dates)
-        result = _model_linear_regression(prices, horizon_days=5)
+        result = _model_random_forest(prices, horizon_days=5)
         self.assertIsNone(result)
+
+    def test_with_commodity_features(self):
+        from src.prediction_engine import _model_random_forest
+        np.random.seed(42)
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=100, freq="D")
+        prices = pd.Series(100 * np.exp(np.cumsum(np.random.randn(100) * 0.01)), index=dates)
+        brent = pd.Series(80 * np.exp(np.cumsum(np.random.randn(100) * 0.02)), index=dates)
+        commodity_hist = {"brent": brent, "gold": None, "copper": None}
+        result = _model_random_forest(prices, 5, commodity_hist, "ENERGY", 15.0)
+        if result is not None:
+            self.assertIn("predicted_pct", result)
+
+
+class TestCommodityCorrelationModel(unittest.TestCase):
+    def _make_correlated(self, n=100):
+        np.random.seed(42)
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=n, freq="D")
+        base = np.cumsum(np.random.randn(n) * 0.02)
+        oil = pd.Series(80 * np.exp(base), index=dates)
+        # Energy equity correlated with oil (r~0.7)
+        equity = pd.Series(50 * np.exp(base * 0.7 + np.random.randn(n) * 0.01), index=dates)
+        return equity, oil
+
+    def test_energy_sector_uses_brent(self):
+        from src.prediction_engine import _model_commodity_correlation
+        equity, oil = self._make_correlated()
+        commodity_hist = {"brent": oil, "gold": None, "copper": None}
+        result = _model_commodity_correlation("XOM", "ENERGY", 100.0, 5, equity, commodity_hist)
+        self.assertIsNotNone(result)
+        self.assertIn("Brent", result["factor"])
+
+    def test_gold_sector_uses_gold(self):
+        from src.prediction_engine import _model_commodity_correlation
+        np.random.seed(42)
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=100, freq="D")
+        gold_spot = pd.Series(2000 * np.exp(np.cumsum(np.random.randn(100) * 0.01)), index=dates)
+        gold_equity = pd.Series(40 * np.exp(np.cumsum(np.random.randn(100) * 0.015)), index=dates)
+        commodity_hist = {"brent": None, "gold": gold_spot, "copper": None}
+        result = _model_commodity_correlation("GDX", "GOLD", 40.0, 5, gold_equity, commodity_hist)
+        self.assertIsNotNone(result)
+        self.assertIn("Gold", result["factor"])
+        self.assertIn("beta 1.6", result["factor"])
+
+    def test_defense_sector_returns_none(self):
+        from src.prediction_engine import _model_commodity_correlation
+        np.random.seed(42)
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=100, freq="D")
+        prices = pd.Series(100 + np.cumsum(np.random.randn(100)), index=dates)
+        commodity_hist = {"brent": prices, "gold": None, "copper": None}
+        result = _model_commodity_correlation("RHM.DE", "DEFENSE", 100.0, 5, prices, commodity_hist)
+        self.assertIsNone(result)
+
+    def test_metals_sector_uses_copper(self):
+        from src.prediction_engine import _model_commodity_correlation
+        np.random.seed(42)
+        dates = pd.date_range(end=datetime.now(timezone.utc), periods=100, freq="D")
+        copper = pd.Series(4.5 * np.exp(np.cumsum(np.random.randn(100) * 0.015)), index=dates)
+        metals_eq = pd.Series(30 * np.exp(np.cumsum(np.random.randn(100) * 0.02)), index=dates)
+        commodity_hist = {"brent": None, "gold": None, "copper": copper}
+        result = _model_commodity_correlation("FCX", "METALS", 30.0, 5, metals_eq, commodity_hist)
+        self.assertIsNotNone(result)
+        self.assertIn("Copper", result["factor"])
+        self.assertIn("beta 1.3", result["factor"])
 
 
 class TestCrossCorrelation(unittest.TestCase):

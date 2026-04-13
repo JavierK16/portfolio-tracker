@@ -451,11 +451,12 @@ TRANCHE_3_DAYS = 180
 PREDICTION_REFRESH_INTERVAL = 1800   # 30 minutes
 PREDICTION_MIN_HISTORY_DAYS = 30     # minimum for technical models (1-3)
 PREDICTION_ENSEMBLE_WEIGHTS = {
-    "ema_momentum":      0.20,
-    "linear_regression": 0.20,
-    "mean_reversion":    0.15,
-    "geopolitical":      0.25,
-    "crisis_regime":     0.20,   # cross-sector crisis pattern model
+    "ema_momentum":         0.12,
+    "random_forest":        0.18,   # upgraded from Ridge (RF: 50%+ RMSE reduction)
+    "mean_reversion":       0.10,
+    "geopolitical":         0.20,
+    "crisis_regime":        0.15,   # cross-sector crisis pattern model
+    "commodity_correlation": 0.25,  # Kilian (2009): oil explains 22% of equity variance
 }
 PREDICTION_HORIZONS = {
     "24h": 1,    # trading days

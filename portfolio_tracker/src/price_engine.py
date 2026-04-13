@@ -24,7 +24,9 @@ from src.fx_engine import get_fx_engine
 logger = logging.getLogger(__name__)
 
 VIX_TICKER = "^VIX"
-BRENT_TICKER = "BZ=F"   # Brent crude futures on yfinance
+BRENT_TICKER = "BZ=F"    # Brent crude futures on yfinance
+GOLD_TICKER = "GC=F"     # Gold futures (COMEX) on yfinance
+COPPER_TICKER = "HG=F"   # Copper futures (COMEX) on yfinance
 
 
 @dataclass
@@ -70,6 +72,12 @@ class PriceEngine:
         self._portfolio_total_pnl_eur: float = 0.0
         self._vix: Optional[float] = None
         self._brent_usd: Optional[float] = None
+        self._gold_usd: Optional[float] = None
+        self._copper_usd: Optional[float] = None
+        # Historical commodity series for prediction models
+        self._brent_history: Optional[pd.Series] = None
+        self._gold_history: Optional[pd.Series] = None
+        self._copper_history: Optional[pd.Series] = None
         self._lock = threading.RLock()
         self._last_refresh: Optional[datetime] = None
         self._fx = get_fx_engine()
@@ -219,6 +227,23 @@ class PriceEngine:
         with self._lock:
             return self._brent_usd
 
+    def get_gold(self) -> Optional[float]:
+        with self._lock:
+            return self._gold_usd
+
+    def get_copper(self) -> Optional[float]:
+        with self._lock:
+            return self._copper_usd
+
+    def get_commodity_histories(self) -> Dict[str, Optional[pd.Series]]:
+        """Return historical price series for Brent, Gold, Copper."""
+        with self._lock:
+            return {
+                "brent": self._brent_history.copy() if self._brent_history is not None else None,
+                "gold": self._gold_history.copy() if self._gold_history is not None else None,
+                "copper": self._copper_history.copy() if self._copper_history is not None else None,
+            }
+
     def last_refresh(self) -> Optional[datetime]:
         with self._lock:
             return self._last_refresh
@@ -332,12 +357,19 @@ class PriceEngine:
             return None
 
     def _fetch_vix_brent(self) -> None:
-        """Fetch VIX and Brent individually (special chars cause issues in bulk)."""
-        for sym, attr in [(VIX_TICKER, "_vix"), (BRENT_TICKER, "_brent_usd")]:
+        """Fetch VIX, Brent, Gold spot, and Copper individually."""
+        for sym, attr in [
+            (VIX_TICKER, "_vix"), (BRENT_TICKER, "_brent_usd"),
+            (GOLD_TICKER, "_gold_usd"), (COPPER_TICKER, "_copper_usd"),
+        ]:
             try:
                 series = self._individual_download(sym)
                 if series is not None and not series.empty:
                     setattr(self, attr, float(series["Close"].iloc[-1]))
+                    # Store historical series for commodity-correlation model
+                    hist_attr = attr.replace("_usd", "_history").replace("_vix", "_vix_history")
+                    if hasattr(self, hist_attr):
+                        setattr(self, hist_attr, series["Close"].dropna())
                     logger.debug("%s = %.2f", sym, getattr(self, attr))
             except Exception as e:
                 logger.debug("Could not fetch %s: %s", sym, e)
