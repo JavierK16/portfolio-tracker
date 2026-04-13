@@ -224,6 +224,11 @@ def render_header(geo_context: GeoContext) -> None:
     n_high     = sum(1 for a in alerts if a.severity == "HIGH")
     n_medium   = sum(1 for a in alerts if a.severity == "MEDIUM")
 
+    # Count data statuses
+    n_stale = sum(1 for p in positions if p.data_status == "STALE")
+    n_na    = sum(1 for p in positions if p.data_status == "N/A")
+    n_live  = sum(1 for p in positions if p.data_status == "LIVE")
+
     col_refresh, col_val, col_dpnl, col_tpnl, col_alerts, col_btn = st.columns([2, 2, 2, 2, 2, 1])
 
     market_open = price_engine.is_market_hours()
@@ -231,10 +236,20 @@ def render_header(geo_context: GeoContext) -> None:
     mkt_colour  = "#00ff88"         if market_open else "#ff6644"
 
     with col_refresh:
+        data_status_parts = []
+        if n_live:
+            data_status_parts.append(f'<span style="color:#00ff88">{n_live} live</span>')
+        if n_stale:
+            data_status_parts.append(f'<span style="color:#ff6644">{n_stale} stale</span>')
+        if n_na:
+            data_status_parts.append(f'<span style="color:#ff4444">{n_na} N/A</span>')
+        data_str = " | ".join(data_status_parts) if data_status_parts else "pending"
+
         st.markdown(
             f"**Last refresh:** {_hours_ago(last_ref)}<br>"
             f"<small>Signals: {_hours_ago(signal_engine.last_refresh_time())}</small><br>"
-            f'<span style="color:{mkt_colour};font-size:0.8rem">{mkt_label}</span>',
+            f'<span style="color:{mkt_colour};font-size:0.8rem">{mkt_label}</span><br>'
+            f"<small>Data: {data_str}</small>",
             unsafe_allow_html=True,
         )
 
@@ -281,6 +296,55 @@ def render_header(geo_context: GeoContext) -> None:
             geo_scorer.refresh()
             signal_engine.refresh_all()
             st.rerun()
+
+    # ── Commodity / Market Indicators Bar ─────────────────────
+    brent = price_engine.get_brent()
+    gold  = price_engine.get_gold()
+    vix   = price_engine.get_vix()
+    copper = price_engine.get_copper()
+
+    fx_rates = price_engine._fx.all_rates()
+    usd_eur = fx_rates.get("USD", 1.08)
+    gbp_eur = fx_rates.get("GBP", 0.86)
+    nok_eur = fx_rates.get("NOK", 11.60)
+
+    mc1, mc2, mc3, mc4, mc5, mc6, mc7 = st.columns(7)
+    with mc1:
+        brent_str = f"${brent:.2f}" if brent else "N/A"
+        st.markdown(f"**🛢 Brent (BZ=F)**<br><span style='color:#ff8844;font-size:1.1rem'>{brent_str}</span>",
+                    unsafe_allow_html=True)
+    with mc2:
+        gold_str = f"${gold:.0f}" if gold else "N/A"
+        st.markdown(f"**🥇 Gold (GC=F)**<br><span style='color:#ffdd44;font-size:1.1rem'>{gold_str}</span>",
+                    unsafe_allow_html=True)
+    with mc3:
+        copper_str = f"${copper:.2f}" if copper else "N/A"
+        st.markdown(f"**🔶 Copper (HG=F)**<br><span style='color:#dd8844;font-size:1.1rem'>{copper_str}</span>",
+                    unsafe_allow_html=True)
+    with mc4:
+        vix_str = f"{vix:.1f}" if vix else "N/A"
+        vix_col = "#ff4444" if vix and vix > 25 else ("#ffaa00" if vix and vix > 18 else "#00ff88")
+        st.markdown(f"**📉 VIX**<br><span style='color:{vix_col};font-size:1.1rem'>{vix_str}</span>",
+                    unsafe_allow_html=True)
+    with mc5:
+        st.markdown(f"**💱 EUR/USD**<br><span style='font-size:1.1rem'>{usd_eur:.4f}</span>",
+                    unsafe_allow_html=True)
+    with mc6:
+        st.markdown(f"**💱 EUR/GBP**<br><span style='font-size:1.1rem'>{gbp_eur:.4f}</span>",
+                    unsafe_allow_html=True)
+    with mc7:
+        st.markdown(f"**💱 EUR/NOK**<br><span style='font-size:1.1rem'>{nok_eur:.4f}</span>",
+                    unsafe_allow_html=True)
+
+    # ── Data Source Status (collapsible) ──────────────────────
+    source_status = price_engine.get_source_status()
+    if source_status:
+        with st.expander("Data Source Status", expanded=False):
+            for src, status in source_status.items():
+                icon = "🟢" if status.startswith("OK") else ("🟡" if "NO_API_KEY" in status else "🔴")
+                st.markdown(f"{icon} **{src}**: {status}")
+            if n_stale > 0:
+                st.warning(f"{n_stale} position(s) showing STALE data — last known prices displayed with red badge.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -461,6 +525,16 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
         def _v(val, fmt):
             return fmt.format(val) if val is not None else "N/A"
 
+        # Status with timestamp for STALE
+        status_str = pos.data_status
+        if pos.data_status == "STALE" and pos.last_updated:
+            status_str = f"STALE ({_hours_ago(pos.last_updated)})"
+
+        # Price display with source
+        price_display = _v(pos.current_price_eur, "{:.2f}")
+        if pos.data_source == "FINNHUB" and pos.current_price_eur is not None:
+            price_display += " (FH)"
+
         rows.append({
             "Ticker":    pos.ticker,
             "Name":      pos.name[:30],
@@ -469,7 +543,7 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
             "Ccy":       pos.currency,
             "Shares":    _v(pos.shares_units,        "{:.2f}"),
             "Entry €":   _v(pos.entry_price_eur,     "{:.2f}"),
-            "Price €":   _v(pos.current_price_eur,   "{:.2f}"),
+            "Price €":   price_display,
             "Value €":   _v(pos.current_value_eur,   "{:,.0f}"),
             "P&L €":     _v(pos.pnl_eur,             "{:+,.0f}"),
             "P&L %":     _v(pos.pnl_pct,             "{:+.2f}%"),
@@ -481,7 +555,7 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
             "Signal":    signal,
             "Score":     f"{score:.0f}" if score is not None else "—",
             "Tranche":   str(pos.tranche),
-            "Status":    pos.data_status,
+            "Status":    status_str,
             "_flags":    flags,
         })
 
@@ -492,6 +566,11 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
 
     # Signal and drift colour mapping
     def highlight_row(row):
+        status = str(row.get("Status", ""))
+        if "STALE" in status:
+            return ["background-color: #3a1500; color: #ff8844"] * len(row)
+        if "N/A" in status:
+            return ["background-color: #2a0000; color: #ff6666"] * len(row)
         sig = row.get("Signal", "HOLD")
         colours = {
             "BUY":    "background-color: #002a15",
