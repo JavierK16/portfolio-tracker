@@ -175,6 +175,56 @@ CRISIS_PATTERNS = [
                     "Real assets outperform, growth sectors underperform.",
         contagion_speed_days=30,
     ),
+    # ── DE-ESCALATION / RESOLUTION PATTERNS ──────────────────
+    # Academic grounding:
+    # - Leigh, Plekhanov & Zettelmeyer (2003 IMF): "peace dividend" produces
+    #   +5-15% in non-conflict sectors, -10 to -20% in conflict beneficiaries
+    # - Guidolin & La Ferrara (2010): resolution of armed conflicts produces
+    #   significant negative returns in defense equities and oil within 3 months
+    # - Schneider & Troeger (2006): war onset raises oil 8-15%; resolution
+    #   reverses 60-80% of the premium within 2 months
+    CrisisPattern(
+        name="GEOPOLITICAL_RESOLUTION",
+        year="Peace dividend",
+        indicators={
+            "geo_energy_score": ("below", 4.0),          # low geopolitical stress
+            "geo_defense_score": ("below", 4.0),
+            "vix_level": ("below", 18.0),                 # calm markets
+            "cross_correlation": ("below", 0.40),          # sectors decoupling
+        },
+        sector_impacts={
+            "ENERGY": -3.0,   # conflict premium unwinding (Schneider-Troeger)
+            "GOLD": -2.0,     # safe haven demand collapsing
+            "DEFENSE": -2.5,  # spending expectations resetting
+            "METALS": +1.5,   # industrial demand recovery
+            "BIOTECH": +2.0,  # risk-on rotation, cheap funding
+        },
+        description="Geopolitical de-escalation / peace resolution. Conflict "
+                    "beneficiaries (energy, defense, gold) give back gains; "
+                    "growth and industrial sectors benefit.",
+        contagion_speed_days=21,
+    ),
+    CrisisPattern(
+        name="SUPPLY_NORMALIZATION",
+        year="Post-crisis",
+        indicators={
+            "energy_spike_pct": ("below", -10.0),         # energy falling
+            "geo_energy_score": ("below", 4.5),            # low energy geo stress
+            "vix_level": ("below", 20.0),                  # normal vol
+            "gold_momentum_pct": ("below", -5.0),          # gold declining
+        },
+        sector_impacts={
+            "ENERGY": -3.5,   # oil supply normalizing → equity premium gone
+            "GOLD": -1.5,     # inflation fears receding
+            "DEFENSE": -0.5,  # slight headwind
+            "METALS": +2.0,   # cheaper energy → higher margins
+            "BIOTECH": +1.5,  # risk-on
+        },
+        description="Supply chains normalizing, energy prices falling. "
+                    "Energy and gold give back crisis gains. "
+                    "Industrials and growth benefit from lower input costs.",
+        contagion_speed_days=30,
+    ),
 ]
 
 

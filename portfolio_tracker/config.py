@@ -45,9 +45,9 @@ PORTFOLIO = [
         "ucits_compliant": True,
     },
     {
-        "ticker": "EQNR",
+        "ticker": "EQNR.OL",
         "name": "Equinor ASA",
-        "exchange": "NYSE",
+        "exchange": "OSLO",
         "type": "STOCK",
         "sector": "ENERGY",
         "isin": "NO0010096985",
@@ -263,8 +263,7 @@ YF_CURRENCY_OVERRIDE = {
     # Remapped tickers
     "SETM.L":  "USD",   # NYSE SETM quotes USD
     "BTEC.AS": "USD",   # LSE BTEC.L quotes USD (not EUR)
-    # Portfolio states NOK (home market) but Yahoo fetches NYSE listing in USD
-    "EQNR":    "USD",
+    # EQNR.OL quotes in NOK — no override needed (matches portfolio config)
     # Portfolio states USD (underlying) but XETRA listing quotes EUR
     "VVMX.DE": "EUR",
 }

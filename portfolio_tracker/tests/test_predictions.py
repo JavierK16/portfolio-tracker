@@ -138,7 +138,7 @@ class TestGeopoliticalModel(unittest.TestCase):
         result = _model_geopolitical("XOM", "ENERGY", 100.0, 5, geo_override)
         self.assertIsNotNone(result)
         self.assertGreater(result["predicted_pct"], 0)
-        self.assertIn("HORMUZ", result["factor"])
+        self.assertIn("Hormuz", result["factor"])
 
     @patch("src.prediction_engine.get_geo_states")
     @patch("src.prediction_engine.get_sector_score_history")
@@ -177,7 +177,50 @@ class TestGeopoliticalModel(unittest.TestCase):
         result = _model_geopolitical("FCX", "METALS", 100.0, 5, geo_override)
         self.assertIsNotNone(result)
         self.assertGreater(result["predicted_pct"], 0)
-        self.assertIn("HOSTILE", result["factor"])
+        self.assertIn("HOSTILE", result["factor"].upper())
+
+    @patch("src.prediction_engine.get_geo_states")
+    @patch("src.prediction_engine.get_sector_score_history")
+    def test_peace_dividend_energy_down(self, mock_hist, mock_states):
+        """HORMUZ OPEN + IRAN RESOLVED = energy should drop (Leigh 2003 IMF)."""
+        from src.prediction_engine import _model_geopolitical
+
+        mock_states.return_value = {}
+        mock_hist.return_value = []
+
+        geo_override = {
+            "HORMUZ_STATUS": "OPEN",
+            "IRAN_CONFLICT": "RESOLVED",
+            "UKRAINE_WAR": "DE-ESCALATING",
+            "US_CHINA_RELATIONS": "NEUTRAL",
+            "NATO_SPENDING": "STABLE",
+        }
+        result = _model_geopolitical("XOM", "ENERGY", 100.0, 5, geo_override)
+        self.assertIsNotNone(result)
+        self.assertLess(result["predicted_pct"], -1.0,
+                        "Energy should predict significant downside when peace resolves")
+        self.assertIn("peace", result["factor"].lower())
+
+    @patch("src.prediction_engine.get_geo_states")
+    @patch("src.prediction_engine.get_sector_score_history")
+    def test_peace_gold_down(self, mock_hist, mock_states):
+        """Full de-escalation should be bearish for gold (safe haven unwinding)."""
+        from src.prediction_engine import _model_geopolitical
+
+        mock_states.return_value = {}
+        mock_hist.return_value = []
+
+        geo_override = {
+            "HORMUZ_STATUS": "OPEN",
+            "IRAN_CONFLICT": "RESOLVED",
+            "UKRAINE_WAR": "RESOLVED",
+            "US_CHINA_RELATIONS": "COOPERATIVE",
+            "NATO_SPENDING": "DECLINING",
+        }
+        result = _model_geopolitical("IGLN.L", "GOLD", 100.0, 5, geo_override)
+        self.assertIsNotNone(result)
+        self.assertLess(result["predicted_pct"], 0,
+                        "Gold should predict downside in full de-escalation")
 
 
 class TestRSI(unittest.TestCase):

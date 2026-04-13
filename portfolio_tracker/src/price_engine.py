@@ -508,8 +508,10 @@ class PriceEngine:
             "BA.L": None, "IGLN.L": None,
             # XETRA tickers
             "RHM.DE": None, "VVMX.DE": None,
+            # Oslo tickers: Finnhub uses EQNR (NYSE) as proxy
+            "EQNR.OL": "EQNR",
             # NYSE/NASDAQ — these work on Finnhub
-            "EQNR": "EQNR", "XOM": "XOM", "FCX": "FCX",
+            "XOM": "XOM", "FCX": "FCX",
             "GDX": "GDX", "VRTX": "VRTX",
             # Remapped
             "SETM.L": "SETM", "BTEC.AS": None,
