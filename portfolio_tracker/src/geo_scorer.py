@@ -387,7 +387,16 @@ class GeopoliticalScorer:
     def _recompute_sector_scores(self) -> None:
         """
         Aggregate last 48h of news into sector geo scores.
-        Maximum drift from base_score: ±2.5 points.
+
+        Calibrated to Caldara-Iacoviello GPR framework:
+        - 5/10 = neutral conditions (base_score for most sectors)
+        - 7-8 = elevated geopolitical tailwind
+        - 9-10 = extreme crisis (reserved for actual wars, embargoes)
+        - 3-4 = mild headwind
+        - 0-2 = severe headwind (full peace + oversupply)
+
+        Maximum drift from base_score: ±4.5 points (widened from ±2.5
+        to allow meaningful movement from lower base scores).
         """
         from config import SECTOR_CONFIG
         recent = get_recent_news(hours=48, limit=500)
@@ -410,11 +419,12 @@ class GeopoliticalScorer:
             base = cfg["base_score"]
             deltas = sector_deltas.get(sector, [])
 
-            # News-driven delta (average, scaled)
+            # News-driven delta (average, scaled by sector sensitivity)
+            # Sensitivity ranges from 0.20 (BIOTECH) to 0.85 (ENERGY)
+            sensitivity = cfg.get("geopolitical_sensitivity", 0.50)
             if deltas:
                 avg_delta = sum(deltas) / len(deltas)
-                # Scale: avg_delta of ±2 maps to ±2.5 score drift
-                news_drift = avg_delta * 1.25
+                news_drift = avg_delta * 1.5 * sensitivity
             else:
                 news_drift = 0.0
 
@@ -422,14 +432,23 @@ class GeopoliticalScorer:
             var_drift = self._compute_var_drift(sector, geo_db)
 
             total_drift = news_drift + var_drift
-            total_drift = max(-2.5, min(2.5, total_drift))
+            total_drift = max(-4.5, min(4.5, total_drift))
 
             new_score = round(max(0.0, min(10.0, base + total_drift)), 2)
             self._sector_scores[sector] = new_score
             save_sector_score(sector, new_score)
 
     def _compute_var_drift(self, sector: str, geo_db: dict) -> float:
-        """Apply geo variable state rules to sector score drift."""
+        """
+        Apply geo variable state rules to sector score drift.
+
+        Calibration principle (Caldara-Iacoviello GPR framework):
+        - "Normal" states (OPEN, STALEMATE, TENSE, INCREASING) = ZERO drift
+          These are already priced into the base score.
+        - Only ESCALATION states add positive drift (crisis premium)
+        - Only DE-ESCALATION/RESOLUTION states add negative drift
+        - This prevents the score-clustering-at-10 problem.
+        """
         drift = 0.0
 
         hormuz   = geo_db.get("HORMUZ_STATUS",      None)
@@ -441,39 +460,53 @@ class GeopoliticalScorer:
         def val(row): return row.current_value if row else None
 
         if sector == "ENERGY":
+            # Hormuz: OPEN=0 (normal), PARTIAL/CLOSED = crisis escalation
             v = val(hormuz)
-            if v == "CLOSED":   drift += 2.0
-            elif v == "PARTIAL": drift += 1.0
-            elif v == "OPEN":    drift -= 1.0
+            if v == "CLOSED":    drift += 3.5   # extreme — Brent would spike
+            elif v == "PARTIAL": drift += 1.5   # tension premium
+            # OPEN = 0 (already in base score)
             v = val(iran)
-            if v == "ACTIVE":   drift += 0.5
-            elif v == "RESOLVED": drift -= 1.5
+            if v == "ACTIVE":    drift += 0.8   # active conflict premium
+            elif v == "CEASEFIRE": drift -= 0.5  # de-escalation
+            elif v == "RESOLVED":  drift -= 2.0  # full resolution = oil normalises
 
         elif sector == "DEFENSE":
+            # Ukraine: STALEMATE=0 (current normal), only escalation adds
             v = val(ukraine)
-            if v == "ESCALATING":    drift += 1.5
-            elif v == "DE-ESCALATING": drift -= 1.0
-            elif v == "RESOLVED":      drift -= 2.0
+            if v == "ESCALATING":      drift += 2.5   # major budget surge
+            # STALEMATE = 0 (priced in)
+            elif v == "DE-ESCALATING": drift -= 1.5   # peace dividend starts
+            elif v == "RESOLVED":      drift -= 3.0   # defense cuts likely
             v = val(nato)
-            if v == "ACCELERATING": drift += 1.5
-            elif v == "INCREASING":  drift += 0.5
-            elif v == "DECLINING":   drift -= 2.0
+            if v == "ACCELERATING": drift += 2.0   # budget surge above plan
+            elif v == "INCREASING":  drift += 0.0   # priced in as new normal
+            elif v == "STABLE":      drift -= 0.5
+            elif v == "DECLINING":   drift -= 2.5   # severe headwind
 
         elif sector == "METALS":
+            # US-China: TENSE=0 (current normal), only extreme moves matter
             v = val(us_china)
-            if v == "HOSTILE":     drift += 1.5
-            elif v == "TENSE":      drift += 0.5
-            elif v == "NEUTRAL":    drift -= 0.5
-            elif v == "COOPERATIVE": drift -= 1.5
+            if v == "HOSTILE":       drift += 2.0   # trade war / export bans
+            # TENSE = 0 (already in base)
+            elif v == "NEUTRAL":     drift -= 1.0
+            elif v == "COOPERATIVE": drift -= 2.5   # removes supply premium
 
         elif sector == "GOLD":
+            # Safe-haven demand only triggered by genuine crises
             v = val(hormuz)
-            if v == "CLOSED":   drift += 1.0
-            elif v == "OPEN":    drift -= 0.5
+            if v == "CLOSED":    drift += 2.0   # flight to safety
+            elif v == "PARTIAL": drift += 0.5
+            # OPEN = 0
             v = val(ukraine)
-            if v == "ESCALATING": drift += 0.5
-            elif v == "RESOLVED":  drift -= 1.0
+            if v == "ESCALATING":  drift += 1.5
+            # STALEMATE = 0
+            elif v == "DE-ESCALATING": drift -= 0.5
+            elif v == "RESOLVED":      drift -= 1.5  # risk-on = gold sells off
+            v = val(iran)
+            if v == "ACTIVE":    drift += 0.5
+            elif v == "RESOLVED": drift -= 1.0
 
+        # BIOTECH: no geo variable drift (sensitivity too low)
         return drift
 
     def _load_recent_news_items(self) -> List[NewsItem]:

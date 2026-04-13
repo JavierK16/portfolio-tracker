@@ -277,72 +277,98 @@ YF_PENCE_TICKERS = {"SPOG.L", "BA.L"}
 # SECTOR CONFIGURATION
 # ─────────────────────────────────────────────────────────────
 SECTOR_CONFIG = {
+    # ── Geo Score Calibration ─────────────────────────────────────
+    # Scores are calibrated to the Caldara-Iacoviello Geopolitical
+    # Risk Index (GPR) framework. 5/10 = neutral conditions,
+    # 7-8 = elevated geopolitical tailwind, 9-10 = extreme crisis.
+    # Base scores reflect NORMAL peacetime conditions, not current
+    # crisis levels. Crises push scores UP via drift; resolution
+    # pushes them DOWN. This prevents score clustering at 9-10.
+    # ──────────────────────────────────────────────────────────────
     "ENERGY": {
-        "base_score": 9.1,
+        "base_score": 5.5,    # Neutral — oil markets functioning normally
         "weight_in_portfolio": 0.28,
-        "geopolitical_sensitivity": "EXTREME",
+        "geopolitical_sensitivity": 0.85,  # highest geo beta (Hamilton 2003)
         "primary_triggers": [
             "hormuz", "iran", "oil", "brent", "crude", "opec",
             "sanctions", "strait", "gulf", "tanker", "lng",
+            "oil embargo", "pipeline", "oil supply",
         ],
         "negative_triggers": [
             "ceasefire", "hormuz reopened", "iran deal",
             "global recession", "demand destruction",
+            "oil price drop", "oil surplus", "opec increase",
+            "oil glut", "demand fall", "shale boom",
+            "renewable energy", "ev adoption", "climate deal",
+            "energy transition", "oil overproduction",
         ],
         "bull_scenario": "Hormuz closure extends, Brent $150+",
-        "bear_scenario": "Ceasefire + full strait reopening → oil normalises $70",
+        "bear_scenario": "Ceasefire + full strait reopening + oil normalises $70",
     },
     "DEFENSE": {
-        "base_score": 9.0,
+        "base_score": 4.5,    # Peacetime baseline — no active NATO mobilisation
         "weight_in_portfolio": 0.27,
-        "geopolitical_sensitivity": "VERY_HIGH",
+        "geopolitical_sensitivity": 0.70,
         "primary_triggers": [
             "nato", "defense spending", "rearmament", "ukraine",
             "rheinmetall", "bae", "military", "war", "conflict",
-            "eu defense", "european army",
+            "eu defense", "european army", "defense contract",
+            "arms deal", "military buildup",
         ],
         "negative_triggers": [
             "peace deal", "ukraine ceasefire", "nato spending cut",
             "trump nato withdrawal", "disarmament",
+            "peace talks", "peace agreement", "truce",
+            "de-escalation", "troops withdraw", "war ends",
+            "defense budget cut", "military withdrawal",
+            "peace treaty", "arms reduction",
         ],
         "bull_scenario": "EU €800B plan accelerates + NATO 5% GDP",
         "bear_scenario": "Ukraine peace + US re-engages NATO → European defense cut",
     },
     "METALS": {
-        "base_score": 6.8,
+        "base_score": 4.0,    # Normal trade conditions — no supply disruption
         "weight_in_portfolio": 0.22,
-        "geopolitical_sensitivity": "HIGH",
+        "geopolitical_sensitivity": 0.60,
         "primary_triggers": [
             "copper", "lithium", "rare earth", "critical minerals",
             "china export", "ev demand", "battery", "setm", "mining",
-            "supply deficit",
+            "supply deficit", "mineral shortage", "china ban",
         ],
         "negative_triggers": [
             "china rare earth deal", "recession", "ev slowdown",
             "oversupply", "demand crash", "commodity bust",
+            "mining surplus", "lithium oversupply", "copper surplus",
+            "trade deal", "china cooperation", "demand weakness",
+            "industrial slowdown", "manufacturing decline",
         ],
         "bull_scenario": "China restricts again + EV demand surges + AI data centers",
         "bear_scenario": "China-US détente removes rare earth premium + recession",
     },
     "GOLD": {
-        "base_score": 8.5,
+        "base_score": 3.5,    # Low-fear environment — risk-on baseline
         "weight_in_portfolio": 0.15,
-        "geopolitical_sensitivity": "HIGH",
+        "geopolitical_sensitivity": 0.50,
         "primary_triggers": [
             "inflation", "safe haven", "gold", "central bank buying",
             "dollar weakness", "geopolitical risk", "war escalation",
+            "gold reserve", "gold demand",
         ],
         "negative_triggers": [
             "peace", "inflation falls", "rate cuts confirmed",
             "dollar strengthens", "risk on",
+            "gold sell", "gold drop", "risk appetite",
+            "stock rally", "equity rally", "inflation cooling",
+            "disinflation", "strong dollar", "rate hike",
+            "fed tightening", "hawkish fed",
         ],
         "bull_scenario": "Inflation stays high + central bank buying + conflict escalates",
         "bear_scenario": "Peace + deflation + strong dollar",
     },
     "BIOTECH": {
-        "base_score": 5.0,
+        "base_score": 5.0,    # Neutral — minimal geopolitical sensitivity
         "weight_in_portfolio": 0.08,
-        "geopolitical_sensitivity": "LOW",
+        "geopolitical_sensitivity": 0.20,  # lowest geo beta
         "primary_triggers": [
             "fda approval", "m&a biotech", "acquisition", "drug approval",
             "clinical trial", "rate cut", "pharma buyout",
@@ -350,6 +376,8 @@ SECTOR_CONFIG = {
         "negative_triggers": [
             "rate hike", "fda rejection", "clinical failure",
             "drug pricing", "stagflation", "capital rotation",
+            "biotech selloff", "funding drought", "ipo freeze",
+            "pharma regulation", "drug price control",
         ],
         "bull_scenario": "M&A wave + FDA approvals + rate cuts resume",
         "bear_scenario": "Stagflation + hikes + capital rotation to energy",

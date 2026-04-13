@@ -29,6 +29,9 @@ from src.database import (
 from src.crisis_patterns import (
     detect_market_regime, model_crisis_regime, MarketRegime,
 )
+from src.futures_curves import (
+    get_all_futures_signals, compute_futures_sector_adjustment, FuturesCurveSignal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +322,7 @@ def _model_random_forest(prices: pd.Series, horizon_days: int,
 def _model_commodity_correlation(ticker: str, sector: str, current_price: float,
                                   horizon_days: int, prices: pd.Series,
                                   commodity_hist: Optional[Dict[str, pd.Series]] = None,
+                                  futures_signals: Optional[Dict[str, FuturesCurveSignal]] = None,
                                   ) -> Optional[dict]:
     """
     Model 6: Commodity-Equity Correlation Model.
@@ -403,6 +407,21 @@ def _model_commodity_correlation(ticker: str, sector: str, current_price: float,
     predicted_daily = current_corr * beta * lagged_comm_ret
     predicted_pct = predicted_daily * horizon_days * 100
 
+    # ── Futures curve adjustment (Gorton & Rouwenhorst 2006) ──
+    futures_adj = 0.0
+    futures_desc = ""
+    if futures_signals:
+        futures_adj = compute_futures_sector_adjustment(futures_signals, sector)
+        # Scale by horizon
+        predicted_pct += futures_adj * horizon_days
+        # Collect curve descriptions
+        curve_parts = []
+        for sig in futures_signals.values():
+            if sig.affected_sectors.get(sector, 0) != 0:
+                curve_parts.append(f"{sig.commodity}: {sig.curve_state}")
+        if curve_parts:
+            futures_desc = " | Futures: " + ", ".join(curve_parts)
+
     # Cap extreme predictions
     predicted_pct = max(-20.0, min(20.0, predicted_pct))
 
@@ -426,6 +445,7 @@ def _model_commodity_correlation(ticker: str, sector: str, current_price: float,
     )
     if hamilton_nopi > 0:
         factor_desc += f". Hamilton NOPI: {hamilton_nopi*100:.1f}% above 12m high"
+    factor_desc += futures_desc
 
     return {
         "predicted_pct": predicted_pct,
@@ -698,12 +718,26 @@ def run_ensemble_for_position(ticker: str, sector: str, current_price_eur: float
         if m5:
             model_results["crisis_regime"] = m5
 
-    # Model 6: Commodity-equity correlation
+    # Model 6: Commodity-equity correlation + futures curve signals
     # Kilian (2009): oil explains 22% of equity variance
     # Gold-miner beta 1.6x, copper-miner beta 1.3x
+    # Gorton & Rouwenhorst (2006): backwardation predicts 10% excess returns
     if has_enough_history and commodity_hist:
+        # Compute futures curve signals if we have commodity spot prices
+        futures_sigs = None
+        try:
+            brent_spot = float(commodity_hist["brent"].iloc[-1]) if commodity_hist.get("brent") is not None and len(commodity_hist["brent"]) > 0 else None
+            gold_spot = float(commodity_hist["gold"].iloc[-1]) if commodity_hist.get("gold") is not None and len(commodity_hist["gold"]) > 0 else None
+            futures_sigs = get_all_futures_signals(
+                brent_spot, gold_spot, vix,
+                commodity_hist.get("brent"), commodity_hist.get("gold"),
+            )
+        except Exception as e:
+            logger.debug("Futures curve analysis skipped: %s", e)
+
         m6 = _model_commodity_correlation(
-            ticker, sector, current_price_eur, horizon_days, prices, commodity_hist,
+            ticker, sector, current_price_eur, horizon_days, prices,
+            commodity_hist, futures_sigs,
         )
         if m6:
             model_results["commodity_correlation"] = m6
