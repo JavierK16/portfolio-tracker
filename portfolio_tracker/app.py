@@ -506,65 +506,59 @@ def render_sector_overview(
 # ─────────────────────────────────────────────────────────────
 
 def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
-    st.subheader("Position Table")
+    st.subheader("Positions")
 
     positions  = price_engine.get_all_positions()
-    total_val  = price_engine.get_portfolio_value()
+
+    # Helper: format only when value is not None
+    def _v(val, fmt):
+        return fmt.format(val) if val is not None else "—"
+
+    # ── Compute 52-week change from DB history ───────────────
+    def _52w_change(ticker: str, current_price_eur: Optional[float]) -> Optional[float]:
+        if current_price_eur is None:
+            return None
+        hist = get_price_history(ticker, days=365)
+        if hist and len(hist) >= 100:
+            oldest_price = hist[0].price_eur
+            if oldest_price and oldest_price > 0:
+                return ((current_price_eur / oldest_price) - 1) * 100
+        return None
 
     rows = []
     for pos in positions:
-        sig     = signals.get(pos.ticker)
-        signal  = sig.signal if sig else "HOLD"
-        score   = sig.composite_score if sig else None
-        flags   = sig.flags if sig else []
+        sig    = signals.get(pos.ticker)
+        signal = sig.signal if sig else "HOLD"
+        score  = sig.composite_score if sig else None
 
-        drift   = pos.drift_from_target or 0
-        drift_col = "#ff4444" if abs(drift) > 3 else ("#00ff88" if abs(drift) <= 1 else "#ffaa00")
-
-        # Helper: format only when value is not None (avoids 0.0 being treated as falsy)
-        def _v(val, fmt):
-            return fmt.format(val) if val is not None else "N/A"
-
-        # Status with timestamp for STALE
+        # Status badge
         status_str = pos.data_status
         if pos.data_status == "STALE" and pos.last_updated:
             status_str = f"STALE ({_hours_ago(pos.last_updated)})"
 
-        # Price display with source
-        price_display = _v(pos.current_price_eur, "{:.2f}")
-        if pos.data_source == "FINNHUB" and pos.current_price_eur is not None:
-            price_display += " (FH)"
+        # 52-week change
+        w52 = _52w_change(pos.ticker, pos.current_price_eur)
+
+        # P&L % vs entry (reference)
+        pnl_pct = pos.pnl_pct
 
         rows.append({
             "Ticker":    pos.ticker,
-            "Name":      pos.name[:30],
+            "Name":      pos.name[:25],
             "Sector":    pos.sector,
-            "Type":      pos.instrument_type,
-            "Ccy":       pos.currency,
-            "Shares":    _v(pos.shares_units,        "{:.2f}"),
-            "Entry €":   _v(pos.entry_price_eur,     "{:.2f}"),
-            "Price €":   price_display,
-            "Value €":   _v(pos.current_value_eur,   "{:,.0f}"),
-            "P&L €":     _v(pos.pnl_eur,             "{:+,.0f}"),
-            "P&L %":     _v(pos.pnl_pct,             "{:+.2f}%"),
-            "Day %":     _v(pos.day_change_pct,      "{:+.2f}%"),
-            "Week %":    _v(pos.week_change_pct,     "{:+.2f}%"),
-            "Weight %":  _v(pos.weight_current_pct,  "{:.1f}%"),
-            "Target %":  f"{pos.target_pct:.1f}%",
-            "Drift":     f"{drift:+.1f}%",
-            "Signal":    signal,
+            "Price €":   _v(pos.current_price_eur, "{:.2f}"),
+            "vs Entry":  _v(pnl_pct, "{:+.1f}%"),
+            "1W":        _v(pos.week_change_pct, "{:+.1f}%"),
+            "1M":        _v(pos.month_change_pct, "{:+.1f}%"),
+            "52W":       _v(w52, "{:+.1f}%"),
             "Score":     f"{score:.0f}" if score is not None else "—",
-            "Tranche":   str(pos.tranche),
+            "Signal":    signal,
             "Status":    status_str,
-            "_flags":    flags,
+            "_flags":    sig.flags if sig else [],
         })
 
     df = pd.DataFrame(rows)
 
-    # Colour styling is limited in st.dataframe — use HTML table for rich formatting
-    # But for interactivity we use st.dataframe with a selection mechanism
-
-    # Signal and drift colour mapping
     def highlight_row(row):
         status = str(row.get("Status", ""))
         if "STALE" in status:
@@ -592,7 +586,7 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
 
     # Row selection for detail panel
     selected = st.selectbox(
-        "Select position to view signal rationale:",
+        "Select position for details:",
         options=[""] + [p.ticker for p in positions],
         format_func=lambda x: x if x else "— select ticker —",
         key="selected_ticker",
@@ -604,7 +598,7 @@ def render_position_table(signals: Dict[str, SignalResult]) -> Optional[str]:
         for flag in row["_flags"]:
             all_flags.append(f"**{row['Ticker']}**: {flag}")
     if all_flags:
-        with st.expander(f"⚠ Active override flags ({len(all_flags)})", expanded=False):
+        with st.expander(f"Active flags ({len(all_flags)})", expanded=False):
             for f in all_flags:
                 st.warning(f)
 

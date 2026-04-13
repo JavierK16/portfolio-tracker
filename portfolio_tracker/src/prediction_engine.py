@@ -611,12 +611,14 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
     override_factors = []
 
     # ── HORMUZ STATUS ────────────────────────────────────────
+    # Gulf War 1991: Hormuz reopening → Brent -30% in one week
+    # 2019 tanker crisis: partial → +15% Brent in days
     hormuz_impact = {
-        "ENERGY":  {"CLOSED": +5.0, "PARTIAL": +2.5, "OPEN": 0.0},
-        "GOLD":    {"CLOSED": +2.0, "PARTIAL": +1.0, "OPEN": 0.0},
-        "DEFENSE": {"CLOSED": +1.5, "PARTIAL": +0.5, "OPEN": 0.0},
-        "METALS":  {"CLOSED": -2.0, "PARTIAL": -1.0, "OPEN": 0.0},
-        "BIOTECH": {"CLOSED": -2.0, "PARTIAL": -1.0, "OPEN": 0.0},
+        "ENERGY":  {"CLOSED": +15.0, "PARTIAL": +6.0, "OPEN": 0.0},
+        "GOLD":    {"CLOSED": +5.0,  "PARTIAL": +2.5, "OPEN": 0.0},
+        "DEFENSE": {"CLOSED": +4.0,  "PARTIAL": +1.5, "OPEN": 0.0},
+        "METALS":  {"CLOSED": -4.0,  "PARTIAL": -2.0, "OPEN": 0.0},
+        "BIOTECH": {"CLOSED": -5.0,  "PARTIAL": -2.5, "OPEN": 0.0},
     }
     h_imp = hormuz_impact.get(sector, {}).get(hormuz, 0.0)
     weekly_impact += h_imp
@@ -624,12 +626,15 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
         override_factors.append(f"Hormuz {hormuz}: {h_imp:+.1f}%/wk for {sector}")
 
     # ── IRAN CONFLICT ────────────────────────────────────────
+    # Iran nuclear deal 2015: Brent -60% over 6 months, energy equities -25%
+    # Iran escalation 2019-20: Brent +15%, energy equities +8% in days
+    # Resolution = full reversal of war premium, historically violent moves
     iran_impact = {
-        "ENERGY":  {"ACTIVE": +2.0, "CEASEFIRE": -0.5, "RESOLVED": -3.0},
-        "GOLD":    {"ACTIVE": +1.5, "CEASEFIRE": -0.3, "RESOLVED": -1.5},
-        "DEFENSE": {"ACTIVE": +1.0, "CEASEFIRE": -0.2, "RESOLVED": -0.5},
-        "METALS":  {"ACTIVE": -0.5, "CEASEFIRE": +0.3, "RESOLVED": +1.0},
-        "BIOTECH": {"ACTIVE": -1.0, "CEASEFIRE": +0.3, "RESOLVED": +1.0},
+        "ENERGY":  {"ACTIVE": +4.0, "CEASEFIRE": -3.0, "RESOLVED": -10.0},
+        "GOLD":    {"ACTIVE": +3.0, "CEASEFIRE": -1.5, "RESOLVED": -5.0},
+        "DEFENSE": {"ACTIVE": +2.0, "CEASEFIRE": -1.0, "RESOLVED": -3.0},
+        "METALS":  {"ACTIVE": -1.0, "CEASEFIRE": +1.0, "RESOLVED": +3.0},
+        "BIOTECH": {"ACTIVE": -2.0, "CEASEFIRE": +1.0, "RESOLVED": +3.0},
     }
     i_imp = iran_impact.get(sector, {}).get(iran, 0.0)
     weekly_impact += i_imp
@@ -637,12 +642,14 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
         override_factors.append(f"Iran {iran}: {i_imp:+.1f}%/wk for {sector}")
 
     # ── UKRAINE WAR ──────────────────────────────────────────
+    # Feb 2022 invasion: Brent +30%, defense equities +40% in weeks
+    # Any resolution: defense gives back 20-30% premium over months
     ukraine_impact = {
-        "ENERGY":  {"ESCALATING": +1.5, "STALEMATE": 0.0, "DE-ESCALATING": -0.5, "RESOLVED": -1.0},
-        "GOLD":    {"ESCALATING": +1.5, "STALEMATE": 0.0, "DE-ESCALATING": -0.5, "RESOLVED": -1.0},
-        "DEFENSE": {"ESCALATING": +3.0, "STALEMATE": +0.5, "DE-ESCALATING": -1.0, "RESOLVED": -2.5},
-        "METALS":  {"ESCALATING": -1.0, "STALEMATE": 0.0, "DE-ESCALATING": +0.3, "RESOLVED": +0.5},
-        "BIOTECH": {"ESCALATING": -1.0, "STALEMATE": 0.0, "DE-ESCALATING": +0.3, "RESOLVED": +0.5},
+        "ENERGY":  {"ESCALATING": +4.0, "STALEMATE": 0.0, "DE-ESCALATING": -2.0, "RESOLVED": -5.0},
+        "GOLD":    {"ESCALATING": +3.0, "STALEMATE": 0.0, "DE-ESCALATING": -1.5, "RESOLVED": -4.0},
+        "DEFENSE": {"ESCALATING": +8.0, "STALEMATE": +1.0, "DE-ESCALATING": -3.0, "RESOLVED": -8.0},
+        "METALS":  {"ESCALATING": -2.0, "STALEMATE": 0.0, "DE-ESCALATING": +1.0, "RESOLVED": +2.0},
+        "BIOTECH": {"ESCALATING": -3.0, "STALEMATE": 0.0, "DE-ESCALATING": +1.0, "RESOLVED": +2.0},
     }
     u_imp = ukraine_impact.get(sector, {}).get(ukraine, 0.0)
     weekly_impact += u_imp
@@ -650,12 +657,14 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
         override_factors.append(f"Ukraine {ukraine}: {u_imp:+.1f}%/wk for {sector}")
 
     # ── US-CHINA RELATIONS ───────────────────────────────────
+    # Trade war 2018-19: rare earth +50%, tech -15%
+    # Phase 1 deal 2020: rare earth -20%, tech +10%
     china_impact = {
-        "ENERGY":  {"HOSTILE": +0.5, "TENSE": 0.0, "NEUTRAL": 0.0, "COOPERATIVE": -0.3},
-        "GOLD":    {"HOSTILE": +1.0, "TENSE": 0.0, "NEUTRAL": -0.3, "COOPERATIVE": -0.5},
-        "DEFENSE": {"HOSTILE": +0.5, "TENSE": 0.0, "NEUTRAL": 0.0, "COOPERATIVE": -0.3},
-        "METALS":  {"HOSTILE": +2.0, "TENSE": +0.5, "NEUTRAL": 0.0, "COOPERATIVE": -1.0},
-        "BIOTECH": {"HOSTILE": -1.5, "TENSE": -0.3, "NEUTRAL": 0.0, "COOPERATIVE": +1.0},
+        "ENERGY":  {"HOSTILE": +1.0, "TENSE": 0.0, "NEUTRAL": 0.0, "COOPERATIVE": -0.5},
+        "GOLD":    {"HOSTILE": +2.0, "TENSE": 0.0, "NEUTRAL": -0.5, "COOPERATIVE": -1.5},
+        "DEFENSE": {"HOSTILE": +1.5, "TENSE": 0.0, "NEUTRAL": 0.0, "COOPERATIVE": -1.0},
+        "METALS":  {"HOSTILE": +5.0, "TENSE": +1.0, "NEUTRAL": 0.0, "COOPERATIVE": -3.0},
+        "BIOTECH": {"HOSTILE": -3.0, "TENSE": -0.5, "NEUTRAL": 0.0, "COOPERATIVE": +2.0},
     }
     c_imp = china_impact.get(sector, {}).get(us_china, 0.0)
     weekly_impact += c_imp
@@ -663,12 +672,14 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
         override_factors.append(f"US-China {us_china}: {c_imp:+.1f}%/wk for {sector}")
 
     # ── NATO SPENDING ────────────────────────────────────────
+    # 2022-24 rearmament: EU defense equities +200% over 2 years
+    # Any reversal would be catastrophic for defense pure-plays
     nato_impact = {
-        "ENERGY":  {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": +0.3},
-        "GOLD":    {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": +0.3},
-        "DEFENSE": {"DECLINING": -2.0, "STABLE": -0.5, "INCREASING": +1.0, "ACCELERATING": +2.5},
-        "METALS":  {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": +0.3, "ACCELERATING": +0.5},
-        "BIOTECH": {"DECLINING": +0.3, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": -0.3},
+        "ENERGY":  {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": +0.5},
+        "GOLD":    {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": +0.5},
+        "DEFENSE": {"DECLINING": -6.0, "STABLE": -1.0, "INCREASING": +2.0, "ACCELERATING": +5.0},
+        "METALS":  {"DECLINING": 0.0, "STABLE": 0.0, "INCREASING": +0.5, "ACCELERATING": +1.0},
+        "BIOTECH": {"DECLINING": +0.5, "STABLE": 0.0, "INCREASING": 0.0, "ACCELERATING": -0.5},
     }
     n_imp = nato_impact.get(sector, {}).get(nato, 0.0)
     weekly_impact += n_imp
@@ -676,38 +687,65 @@ def _model_geopolitical(ticker: str, sector: str, current_price: float,
         override_factors.append(f"NATO {nato}: {n_imp:+.1f}%/wk for {sector}")
 
     # ── COMPOUND EFFECTS (nonlinear interactions) ────────────
-    # Hormuz OPEN + Iran RESOLVED = "peace dividend" — amplify energy downside
-    # Leigh et al. (2003 IMF): peace resolution produces -10 to -20% in
-    # sectors that benefited from the conflict within 3 months
+    # When multiple conflicts resolve simultaneously, the unwind is
+    # MORE than additive — markets reprice the entire risk premium at once.
+    #
+    # Historical precedent:
+    # - Gulf War end (Feb 1991): oil -33% in ONE WEEK, energy equities -15%
+    # - Iran deal (Jul 2015): Brent -60% over 6 months
+    # - If both Hormuz reopens AND Iran resolves: this is a regime change,
+    #   not incremental news. Energy war premium (est. $20-30/bbl) collapses.
+    #   At Brent beta 1.0 and $20 premium on $80 base = -25% oil = -20% equities
+
     if hormuz == "OPEN" and iran in ("CEASEFIRE", "RESOLVED"):
-        peace_multiplier = 1.5 if iran == "RESOLVED" else 1.2
+        peace_multiplier = 2.0 if iran == "RESOLVED" else 1.3
         if sector == "ENERGY":
-            compound = -2.0 * peace_multiplier  # additional weekly drag
+            compound = -5.0 * peace_multiplier
             weekly_impact += compound
             override_factors.append(
-                f"Peace dividend (Hormuz open + Iran {iran}): "
-                f"energy equity premium unwinding {compound:+.1f}%/wk"
+                f"PEACE DIVIDEND (Hormuz open + Iran {iran}): "
+                f"war premium collapsing {compound:+.1f}%/wk — "
+                f"Gulf War 1991 precedent: oil -33% in 1 week"
             )
         elif sector == "GOLD":
-            compound = -1.0 * peace_multiplier
+            compound = -3.0 * peace_multiplier
             weekly_impact += compound
             override_factors.append(
-                f"Peace dividend: safe haven demand falling {compound:+.1f}%/wk"
+                f"Peace dividend: safe-haven demand evaporating {compound:+.1f}%/wk"
+            )
+        elif sector == "DEFENSE":
+            compound = -2.0 * peace_multiplier
+            weekly_impact += compound
+            override_factors.append(
+                f"Peace dividend: conflict premium unwinding {compound:+.1f}%/wk"
             )
 
     # Full multi-front de-escalation: Ukraine + Iran + Hormuz all peaceful
+    # This is the "peace breaks out everywhere" scenario — maximum pain for
+    # conflict beneficiaries, maximum gain for risk-on assets
     if (hormuz == "OPEN" and iran == "RESOLVED"
             and ukraine in ("RESOLVED", "DE-ESCALATING")
             and us_china in ("NEUTRAL", "COOPERATIVE")):
         if sector == "ENERGY":
-            weekly_impact += -1.5  # additional decompression
-            override_factors.append("Full de-escalation: energy risk premium collapsing")
+            weekly_impact += -5.0
+            override_factors.append(
+                "FULL DE-ESCALATION: all conflict premiums collapsing simultaneously"
+            )
         elif sector == "DEFENSE":
-            weekly_impact += -1.5
-            override_factors.append("Full de-escalation: defense spending expectations falling")
+            weekly_impact += -5.0
+            override_factors.append(
+                "FULL DE-ESCALATION: peace dividend → defense budgets at risk"
+            )
+        elif sector == "GOLD":
+            weekly_impact += -3.0
+            override_factors.append(
+                "FULL DE-ESCALATION: no safe-haven need → gold selling"
+            )
         elif sector in ("METALS", "BIOTECH"):
-            weekly_impact += +0.5
-            override_factors.append("Full de-escalation: risk-on rotation into growth/industrials")
+            weekly_impact += +3.0
+            override_factors.append(
+                "FULL DE-ESCALATION: risk-on rotation into growth/industrials"
+            )
 
     # Multi-front escalation: amplify all impacts
     escalation_count = sum([
